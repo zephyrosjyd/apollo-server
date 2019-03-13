@@ -7,7 +7,7 @@ import {
   GraphQLSchema,
   ValidationContext,
   ASTVisitor,
-  GraphQLError,
+  GraphQLFormattedError,
   OperationDefinitionNode,
   DocumentNode,
 } from 'graphql';
@@ -34,7 +34,7 @@ export interface GraphQLRequest {
 
 export interface GraphQLResponse {
   data?: Record<string, any>;
-  errors?: GraphQLError[];
+  errors?: GraphQLFormattedError[];
   extensions?: Record<string, any>;
   http?: Pick<Response, 'headers'>;
 }

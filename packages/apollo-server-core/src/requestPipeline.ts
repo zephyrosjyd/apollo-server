@@ -29,6 +29,7 @@ import {
   ValidationError,
   PersistedQueryNotSupportedError,
   PersistedQueryNotFoundError,
+  formatApolloErrors,
 } from 'apollo-server-errors';
 import {
   GraphQLRequest,
@@ -301,11 +302,14 @@ export async function processGraphQLRequest<TContext>(
     let response: GraphQLResponse;
 
     try {
-      response = (await execute(
+      const result = await execute(
         requestContext.document,
         request.operationName,
         request.variables,
-      )) as GraphQLResponse;
+      );
+
+      response = formatResult(result);
+
       executionDidEnd();
     } catch (executionError) {
       executionDidEnd(executionError);
@@ -417,16 +421,34 @@ export async function processGraphQLRequest<TContext>(
       ? errorOrErrors
       : [errorOrErrors];
 
-    return sendResponse({
-      errors: errors.map(err =>
-        fromGraphQLError(
-          err,
-          errorClass && {
-            errorClass,
-          },
+    return sendResponse(
+      formatResult({
+        errors: errors.map(err =>
+          fromGraphQLError(
+            err,
+            errorClass && {
+              errorClass,
+            },
+          ),
         ),
-      ),
-    });
+      }),
+    );
+  }
+
+  function formatResult(result: ExecutionResult): GraphQLResponse {
+    if (result.errors) {
+      extensionStack.didEncounterErrors(result.errors);
+    }
+
+    return {
+      ...result,
+      errors: result.errors
+        ? formatApolloErrors(result.errors, {
+            formatter: config.formatError,
+            debug: requestContext.debug,
+          })
+        : undefined,
+    };
   }
 
   function initializeRequestListenerDispatcher(): Dispatcher<
