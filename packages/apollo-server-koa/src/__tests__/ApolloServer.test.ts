@@ -28,7 +28,16 @@ const resolvers = {
   },
 };
 
-describe('apollo-server-koa', () => {
+// If we're on Node.js v6, skip this test, since `koa-bodyparser` has dropped
+// support for it and there was an important update to it which we brought in
+// through https://github.com/apollographql/apollo-server/pull/3229.
+// It's worth noting that Node.js v6 has been out of Long-Term-Support status
+// for four months and is no longer recommended by the Node.js Foundation.
+(
+  NODE_MAJOR_VERSION === 6 ?
+  describe.skip :
+  describe
+)('apollo-server-koa', () => {
   let server;
   let httpServer;
   testApolloServer(
@@ -48,7 +57,16 @@ describe('apollo-server-koa', () => {
   );
 });
 
-describe('apollo-server-koa', () => {
+// If we're on Node.js v6, skip this test, since `koa-bodyparser` has dropped
+// support for it and there was an important update to it which we brought in
+// through https://github.com/apollographql/apollo-server/pull/3229.
+// It's worth noting that Node.js v6 has been out of Long-Term-Support status
+// for four months and is no longer recommended by the Node.js Foundation.
+(
+  NODE_MAJOR_VERSION === 6 ?
+  describe.skip :
+  describe
+)('apollo-server-koa', () => {
   let server: ApolloServer;
 
   let app: Koa;
