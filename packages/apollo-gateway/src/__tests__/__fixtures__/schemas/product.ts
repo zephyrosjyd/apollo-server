@@ -26,6 +26,10 @@ export const typeDefs = gql`
     price: String
   }
 
+  interface Downloadable {
+    url: String!
+  }
+
   type Furniture implements Product @key(fields: "upc") @key(fields: "sku") {
     upc: String!
     sku: String!
@@ -43,6 +47,26 @@ export const typeDefs = gql`
     sku: String!
     name(delimeter: String = " "): String @requires(fields: "title year")
     price: String
+  }
+
+  type AudioBook implements Product & Downloadable @key(fields: "upc") {
+    upc: String!
+    sku: String!
+    name: String
+    price: String
+    url: String!
+  }
+
+  type App implements Product & Downloadable @key(fields: "upc") {
+    upc: String!
+    sku: String!
+    name: String
+    price: String
+    url: String!
+  }
+
+  type UserManual implements Downloadable {
+    url: String!
   }
 
   type Car @key(fields: "id") {
@@ -109,6 +133,14 @@ const products = [
   { __typename: 'Book', isbn: '1234567890', price: 59 },
   { __typename: 'Book', isbn: '404404404', price: 0 },
   { __typename: 'Book', isbn: '0987654321', price: 29 },
+  // {
+  //   __typename: 'AudioBook',
+  //   upc: '1000',
+  //   sku: 'AUDIOBOOK1',
+  //   name: 'Good Listening',
+  //   price: 899,
+  //   onlineOnly: true,
+  // },
 ];
 
 const cars = [

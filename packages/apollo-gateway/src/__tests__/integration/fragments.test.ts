@@ -6,6 +6,11 @@ import * as inventory from '../__fixtures__/schemas/inventory';
 import * as product from '../__fixtures__/schemas/product';
 import * as reviews from '../__fixtures__/schemas/reviews';
 
+import { astSerializer, queryPlanSerializer } from '../../snapshotSerializers';
+
+expect.addSnapshotSerializer(astSerializer);
+expect.addSnapshotSerializer(queryPlanSerializer);
+
 beforeAll(() => {
   disableFragmentWarnings();
 });
@@ -254,4 +259,189 @@ it('supports root fragments', async () => {
   });
 
   expect(queryPlan).toCallService('accounts');
+});
+
+it('resolves fragments on interfaces (TODO - more detail / describe this better)', async () => {
+  const query = gql`
+    query TopCars {
+      topCars {
+        ... on Product {
+          upc
+          sku
+          name
+          price
+        }
+      }
+    }
+  `;
+
+  const { data, errors, queryPlan } = await execute(
+    [accounts, books, inventory, product, reviews],
+    {
+      query,
+    },
+  );
+
+  expect(errors).toMatchInlineSnapshot(`
+    Array [
+      [GraphQLError: Fragment cannot be spread here as objects of type "Car" can never be of type "Book".],
+      [GraphQLError: Fragment cannot be spread here as objects of type "Car" can never be of type "Furniture".],
+    ]
+  `);
+
+  expect(queryPlan).toMatchInlineSnapshot(`
+    QueryPlan {
+      Sequence {
+        Fetch(service: "product") {
+          {
+            topCars {
+              ... on Book {
+                __typename
+                isbn
+              }
+              ... on Furniture {
+                upc
+                sku
+                name
+                price
+              }
+            }
+          }
+        },
+        Flatten(path: "topCars.@") {
+          Fetch(service: "books") {
+            {
+              ... on Book {
+                __typename
+                isbn
+              }
+            } =>
+            {
+              ... on Book {
+                __typename
+                isbn
+                title
+                year
+              }
+            }
+          },
+        },
+        Flatten(path: "topCars.@") {
+          Fetch(service: "product") {
+            {
+              ... on Book {
+                __typename
+                isbn
+                title
+                year
+              }
+            } =>
+            {
+              ... on Book {
+                upc
+                sku
+                name
+                price
+              }
+            }
+          },
+        },
+      },
+    }
+  `);
+});
+
+it('resolves fragments on interfaces (nested) (TODO - more detail / describe this better)', async () => {
+  const query = gql`
+    query TopProducts {
+      topProducts {
+        ... on Downloadable {
+          url
+          # ... on Product ?
+        }
+        name
+        # ... on Product ?
+      }
+    }
+  `;
+
+  const { data, errors, queryPlan } = await execute(
+    [accounts, books, inventory, product, reviews],
+    {
+      query,
+    },
+  );
+
+  expect(errors).toMatchInlineSnapshot(`
+    Array [
+      [GraphQLError: Fragment cannot be spread here as objects of type "Product" can never be of type "UserManual".],
+    ]
+  `);
+
+  expect(queryPlan).toMatchInlineSnapshot(`
+    QueryPlan {
+      Sequence {
+        Fetch(service: "product") {
+          {
+            topProducts {
+              __typename
+              ... on App {
+                url
+                name
+              }
+              ... on AudioBook {
+                url
+                name
+              }
+              ... on UserManual {
+                url
+              }
+              ... on Book {
+                __typename
+                isbn
+              }
+              ... on Furniture {
+                name
+              }
+            }
+          }
+        },
+        Flatten(path: "topProducts.@") {
+          Fetch(service: "books") {
+            {
+              ... on Book {
+                __typename
+                isbn
+              }
+            } =>
+            {
+              ... on Book {
+                __typename
+                isbn
+                title
+                year
+              }
+            }
+          },
+        },
+        Flatten(path: "topProducts.@") {
+          Fetch(service: "product") {
+            {
+              ... on Book {
+                __typename
+                isbn
+                title
+                year
+              }
+            } =>
+            {
+              ... on Book {
+                name
+              }
+            }
+          },
+        },
+      },
+    }
+  `);
 });

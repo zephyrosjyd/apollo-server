@@ -28,6 +28,16 @@ export const typeDefs = gql`
     metadata: [UserMetadata] @external
     goodDescription: Boolean @requires(fields: "metadata { description }")
   }
+
+  extend type AudioBook @key(fields: "upc") {
+    upc: String! @external
+    inStock: Boolean
+  }
+
+  extend type App @key(fields: "upc") {
+    upc: String! @external
+    inStock: Boolean
+  }
 `;
 
 const inventory = [

@@ -170,12 +170,14 @@ it('fetches composite fields from a foreign type casted to an interface [@provid
     }
   `;
 
-  const { data, queryPlan } = await execute(
+  const { data, queryPlan, errors } = await execute(
     [accounts, books, inventory, product, reviews],
     {
       query,
     },
   );
+
+  expect(errors).toBeUndefined();
 
   expect(data).toEqual({
     me: {

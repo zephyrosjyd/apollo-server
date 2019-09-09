@@ -55,6 +55,16 @@ export const typeDefs = gql`
     retailPrice: String @requires(fields: "price")
   }
 
+  extend type AudioBook @key(fields: "upc") {
+    upc: String! @external
+    reviews: [Review]
+  }
+
+  extend type App @key(fields: "upc") {
+    upc: String! @external
+    reviews: [Review]
+  }
+
   extend type Mutation {
     reviewProduct(upc: String!, body: String!): Product
     updateReview(review: UpdateReviewInput!): Review
