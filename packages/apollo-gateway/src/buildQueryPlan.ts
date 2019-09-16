@@ -48,6 +48,8 @@ import {
 import { getFieldDef, getResponseName } from './utilities/graphql';
 import { MultiMap } from './utilities/MultiMap';
 
+// import { Policy, combineClaims, convertExportToAlias, convertMatchToAlias, extractFragmentVariables } from './Policy'
+
 const typenameField = {
   kind: Kind.FIELD,
   name: {
@@ -157,6 +159,7 @@ function splitRootFields(
   context: QueryPlanningContext,
   fields: FieldSet,
 ): FetchGroup[] {
+  // policy groupings
   const groupsByService: {
     [serviceName: string]: FetchGroup;
   } = Object.create(null);
@@ -275,6 +278,10 @@ function splitSubfields(
         fieldNode,
       );
     }
+
+    // Does the parent type have policies applied to it?
+    // Does the field return a type with policies applied to it?
+
     // Is the field defined on the base service?
     if (owningService === baseService) {
       // Can we fetch the field from the parent group?
@@ -866,6 +873,7 @@ export class QueryPlanningContext {
 
     return providedFields;
   }
+
 }
 
 function addPath(path: ResponsePath, responseName: string, type: GraphQLType) {
@@ -881,3 +889,4 @@ function addPath(path: ResponsePath, responseName: string, type: GraphQLType) {
 
   return path;
 }
+

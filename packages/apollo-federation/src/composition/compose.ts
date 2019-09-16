@@ -101,6 +101,12 @@ export interface KeyDirectivesMap {
   [typeName: string]: ServiceNameToKeyDirectivesMap;
 }
 
+/*
+ *
+ * Map of types to their policies (includes field level policies)
+ *
+ */
+
 /**
  * A set of type names that have been determined to be a value type, a type
  * shared across at least 2 services.
@@ -155,6 +161,8 @@ export function buildMapsFromServiceList(serviceList: ServiceDefinition[]) {
             );
           }
         }
+
+        // look for policy directives on types that are entities and collect them
       }
 
       if (isTypeDefinitionNode(definition)) {
@@ -360,6 +368,9 @@ export function addFederationMetadataToSchemaNodes({
         keys: keyDirectivesMap[typeName],
       }),
     };
+
+
+    // look for policy directives on fields that return entities
 
     // For object types, add metadata for all the @provides directives from its fields
     if (isObjectType(namedType)) {

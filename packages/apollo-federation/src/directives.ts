@@ -69,6 +69,27 @@ export const ProvidesDirective = new GraphQLDirective({
   },
 });
 
+/*
+ *
+ * Policy directives
+ *
+ * directive @policy(claim: _FieldSet, condition: _FieldSet) on OBJECT | INTERFACE | FIELD_DEFINITION
+ *
+ * directive @export(as: _Any) on FIELD
+ *
+ * directive @match(
+ *   eq: _Any,
+ *   ne: _Any,
+ *   gt: Float,
+ *   lt: Float,
+ *   gte: Float,
+ *   lte: Float,
+ *   in: [_Any],
+ *   nin: [_Any],
+ * ) on FIELD
+ *
+ */
+
 export const federationDirectives = [
   KeyDirective,
   ExtendsDirective,

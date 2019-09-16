@@ -48,6 +48,13 @@ export interface FlattenNode {
   node: PlanNode;
 }
 
+/* 
+ *
+ * export interface PolicyNode {
+ *  
+ * }
+ */
+
 export function serializeQueryPlan(queryPlan: QueryPlan) {
   return prettyFormat(queryPlan, {
     plugins: [queryPlanSerializer, astSerializer],

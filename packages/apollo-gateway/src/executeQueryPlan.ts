@@ -191,8 +191,13 @@ async function executeNode<TContext>(
       }
       return new Trace.QueryPlanNode({ fetch: traceNode });
     }
+    // case 'Policy': {}
   }
 }
+
+// async function executeClaimFetch(){}
+// async function executeConditionFetch()
+// function evaluatePolicy(): Boolean {}
 
 async function executeFetch<TContext>(
   context: ExecutionContext<TContext>,
