@@ -91,6 +91,8 @@ export interface EngineReportingOptions<TContext> {
    * Minimum back-off for retries. Defaults to 100ms.
    */
   minimumRetryDelayMs?: number;
+  // TODO: Give this thing a better name
+  reportGraphQLValidationFailuresWithStaticIdentifier?: boolean;
   /**
    * By default, errors that occur when sending trace reports to Engine servers
    * will be logged to standard error. Specify this function to process errors
@@ -186,6 +188,8 @@ export interface EngineReportingOptions<TContext> {
    */
   generateClientInfo?: GenerateClientInfo<TContext>;
 }
+
+const validationErrorStaticIdentifier = "validationError";
 
 export interface AddTraceArgs {
   trace: Trace;
@@ -311,7 +315,10 @@ export class EngineReportingAgent<TContext = any> {
       operationName,
     });
 
-    const statsReportKey = `# ${operationName || '-'}\n${signature}`;
+    const operationNameOrStatic = signature === validationErrorStaticIdentifier ?
+      validationErrorStaticIdentifier : operationName;
+
+    const statsReportKey = `# ${operationNameOrStatic || '-'}\n${signature}`;
     if (!report.tracesPerQuery.hasOwnProperty(statsReportKey)) {
       report.tracesPerQuery[statsReportKey] = new Traces();
       (report.tracesPerQuery[statsReportKey] as any).encodedTraces = [];
@@ -480,6 +487,9 @@ export class EngineReportingAgent<TContext = any> {
     }
 
     if (!documentAST) {
+      if (this.options.reportGraphQLValidationFailuresWithStaticIdentifier === true) {
+        return validationErrorStaticIdentifier;
+      }
       // We didn't get an AST, possibly because of a parse failure. Let's just
       // use the full query string.
       //
