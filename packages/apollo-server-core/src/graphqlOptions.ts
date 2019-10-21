@@ -12,7 +12,7 @@ import { KeyValueCache, InMemoryLRUCache } from 'apollo-server-caching';
 import { DataSource } from 'apollo-datasource';
 import { ApolloServerPlugin } from 'apollo-server-plugin-base';
 import { GraphQLParseOptions } from 'graphql-tools';
-import { GraphQLExecutor, ValueOrPromise } from 'apollo-server-types';
+import { GraphQLExecutor, ValueOrPromise, GraphQLResponse } from 'apollo-server-types';
 
 /*
  * GraphQLServerOptions
@@ -32,14 +32,15 @@ import { GraphQLExecutor, ValueOrPromise } from 'apollo-server-types';
  */
 export interface GraphQLServerOptions<
   TContext = Record<string, any>,
-  TRootValue = any
+  TRootValue = any,
+  TResponse extends GraphQLResponse = GraphQLResponse,
 > {
   schema: GraphQLSchema;
   formatError?: (error: GraphQLError) => GraphQLFormattedError;
   rootValue?: ((parsedQuery: DocumentNode) => TRootValue) | TRootValue;
   context?: TContext | (() => never);
   validationRules?: Array<(context: ValidationContext) => any>;
-  executor?: GraphQLExecutor;
+  executor?: GraphQLExecutor<TContext, TResponse>;
   formatResponse?: Function;
   fieldResolver?: GraphQLFieldResolver<any, TContext>;
   debug?: boolean;

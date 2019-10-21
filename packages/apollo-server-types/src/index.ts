@@ -58,9 +58,12 @@ export interface GraphQLRequestMetrics {
   queryPlanTrace?: Trace.QueryPlanNode;
 }
 
-export interface GraphQLRequestContext<TContext = Record<string, any>> {
+export interface GraphQLRequestContext<
+  TContext = Record<string, any>,
+  TResponse extends GraphQLResponse = GraphQLResponse,
+> {
   readonly request: GraphQLRequest;
-  readonly response?: GraphQLResponse;
+  readonly response?: TResponse;
 
   readonly context: TContext;
   readonly cache: KeyValueCache;
@@ -95,9 +98,14 @@ export type ValidationRule = (context: ValidationContext) => ASTVisitor;
 
 export class InvalidGraphQLRequestError extends Error {}
 
-export type GraphQLExecutor<TContext = Record<string, any>> = (
+export type UserContextDefault = Record<string, any>;
+
+export type GraphQLExecutor<
+  TContext = Record<string, any>,
+  TResponse extends GraphQLResponse = GraphQLResponse
+> = (
   requestContext: WithRequired<
-    GraphQLRequestContext<TContext>,
+    GraphQLRequestContext<TContext, TResponse>,
     'document' | 'operationName' | 'operation' | 'queryHash'
   >,
 ) => ValueOrPromise<GraphQLExecutionResult>;

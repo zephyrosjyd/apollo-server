@@ -1,4 +1,4 @@
-import { GraphQLRequestContext, WithRequired } from 'apollo-server-types';
+import { GraphQLRequestContext, WithRequired, GraphQLResponse } from 'apollo-server-types';
 import { Request, Headers } from 'apollo-server-env';
 import {
   GraphQLResolveInfo,
@@ -28,7 +28,7 @@ const clientVersionHeaderKey = 'apollographql-client-version';
 // addTrace callback in its constructor. This class isn't for direct use; its
 // constructor is a private API for communicating with EngineReportingAgent.
 // Its public methods all implement the GraphQLExtension interface.
-export class EngineReportingExtension<TContext = any>
+export class EngineReportingExtension<TContext = any, TResponse extends GraphQLResponse = GraphQLResponse>
   implements GraphQLExtension<TContext> {
   private treeBuilder: EngineReportingTreeBuilder;
   private explicitOperationName?: string | null;
@@ -63,7 +63,7 @@ export class EngineReportingExtension<TContext = any>
     context: TContext;
     extensions?: Record<string, any>;
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'queryHash'
     >;
   }): EndHandler {

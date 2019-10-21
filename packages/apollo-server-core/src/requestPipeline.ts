@@ -71,7 +71,10 @@ function computeQueryHash(query: string) {
     .digest('hex');
 }
 
-export interface GraphQLRequestPipelineConfig<TContext> {
+export interface GraphQLRequestPipelineConfig<
+  TContext,
+  TResponse extends GraphQLResponse = GraphQLResponse
+> {
   schema: GraphQLSchema;
 
   rootValue?: ((document: DocumentNode) => any) | any;
@@ -87,7 +90,7 @@ export interface GraphQLRequestPipelineConfig<TContext> {
   cacheControl?: CacheControlExtensionOptions;
 
   formatError?: (error: GraphQLError) => GraphQLFormattedError;
-  formatResponse?: (response: GraphQLResponse | null, requestContext: GraphQLRequestContext<TContext>) => GraphQLResponse;
+  formatResponse?: (response: TResponse | null, requestContext: GraphQLRequestContext<TContext, TResponse>) => TResponse;
 
   plugins?: ApolloServerPlugin[];
   documentStore?: InMemoryLRUCache<DocumentNode>;
@@ -101,15 +104,18 @@ export type DataSources<TContext> = {
 
 type Mutable<T> = { -readonly [P in keyof T]: T[P] };
 
-export async function processGraphQLRequest<TContext>(
-  config: GraphQLRequestPipelineConfig<TContext>,
-  requestContext: Mutable<GraphQLRequestContext<TContext>>,
-): Promise<GraphQLResponse> {
+export async function processGraphQLRequest<
+  TContext = Record<string, any>,
+  TResponse extends GraphQLResponse = GraphQLResponse
+>(
+  config: GraphQLRequestPipelineConfig<TContext, TResponse>,
+  requestContext: Mutable<GraphQLRequestContext<TContext, TResponse>>,
+): Promise<TResponse> {
   let cacheControlExtension: CacheControlExtension | undefined;
-  const extensionStack = initializeExtensionStack();
+  const extensionStack = initializeExtensionStack<TContext, TResponse>();
   (requestContext.context as any)._extensionStack = extensionStack;
 
-  const dispatcher = initializeRequestListenerDispatcher();
+  const dispatcher = initializeRequestListenerDispatcher<TContext, TResponse>();
 
   initializeDataSources();
 
@@ -325,7 +331,7 @@ export async function processGraphQLRequest<TContext>(
       );
     }
 
-    let response: GraphQLResponse | null = await dispatcher.invokeHooksUntilNonNull(
+    let response: TResponse | null = await dispatcher.invokeHooksUntilNonNull(
       'responseForOperation',
       requestContext as WithRequired<
         typeof requestContext,
@@ -383,7 +389,7 @@ export async function processGraphQLRequest<TContext>(
     }
 
     if (config.formatResponse) {
-      const formattedResponse: GraphQLResponse | null = config.formatResponse(
+      const formattedResponse: TResponse | null = config.formatResponse(
         response,
         requestContext,
       );
@@ -466,9 +472,9 @@ export async function processGraphQLRequest<TContext>(
     }
   }
 
-  async function sendResponse(
-    response: GraphQLResponse,
-  ): Promise<GraphQLResponse> {
+  async function sendResponse<TResponse extends GraphQLResponse>(
+    response: TResponse,
+  ): Promise<TResponse> {
     // We override errors, data, and extensions with the passed in response,
     // but keep other properties (like http)
     requestContext.response = extensionStack.willSendResponse({
@@ -503,10 +509,10 @@ export async function processGraphQLRequest<TContext>(
     );
   }
 
-  async function sendErrorResponse(
+  async function sendErrorResponse<TResponse>(
     errorOrErrors: ReadonlyArray<GraphQLError> | GraphQLError,
     errorClass?: typeof ApolloError,
-  ) {
+  ): Promise<TResponse> {
     // If a single error is passed, it should still be encapsulated in an array.
     const errors = Array.isArray(errorOrErrors)
       ? errorOrErrors
@@ -537,10 +543,11 @@ export async function processGraphQLRequest<TContext>(
     });
   }
 
-  function initializeRequestListenerDispatcher(): Dispatcher<
-    GraphQLRequestListener
-  > {
-    const requestListeners: GraphQLRequestListener<TContext>[] = [];
+  function initializeRequestListenerDispatcher<
+    TContext,
+    TResponse extends GraphQLResponse = GraphQLResponse
+  >(): Dispatcher<GraphQLRequestListener<TContext, TResponse>> {
+    const requestListeners: GraphQLRequestListener<TContext, TResponse>[] = [];
     if (config.plugins) {
       for (const plugin of config.plugins) {
         if (!plugin.requestDidStart) continue;
@@ -553,7 +560,10 @@ export async function processGraphQLRequest<TContext>(
     return new Dispatcher(requestListeners);
   }
 
-  function initializeExtensionStack(): GraphQLExtensionStack<TContext> {
+  function initializeExtensionStack<
+    TContext,
+    TResponse extends GraphQLResponse = GraphQLResponse
+  >(): GraphQLExtensionStack<TContext, TResponse> {
     enableGraphQLExtensions(config.schema);
 
     // If custom extension factories were provided, create per-request extension

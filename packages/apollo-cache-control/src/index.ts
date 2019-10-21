@@ -43,7 +43,7 @@ declare module 'graphql/type/definition' {
 }
 
 declare module 'apollo-server-types' {
-  interface GraphQLRequestContext<TContext> {
+  interface GraphQLRequestContext<TContext, TResponse> {
     // Not readonly: plugins can set it.
     overallCachePolicy?: Required<CacheHint> | undefined;
   }

@@ -17,33 +17,36 @@ export {
 
 export interface ApolloServerPlugin {
   serverWillStart?(service: GraphQLServiceContext): ValueOrPromise<void>;
-  requestDidStart?<TContext>(
-    requestContext: GraphQLRequestContext<TContext>,
-  ): GraphQLRequestListener<TContext> | void;
+  requestDidStart?<TContext, TResponse extends GraphQLResponse = GraphQLResponse>(
+    requestContext: GraphQLRequestContext<TContext, TResponse>,
+  ): GraphQLRequestListener<TContext, TResponse> | void;
 }
 
-export interface GraphQLRequestListener<TContext = Record<string, any>> {
+export interface GraphQLRequestListener<
+  TContext,
+  TResponse extends GraphQLResponse = GraphQLResponse,
+> {
   parsingDidStart?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'source'
     >,
   ): ((err?: Error) => void) | void;
   validationDidStart?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'source' | 'document'
     >,
   ): ((err?: ReadonlyArray<Error>) => void) | void;
   didResolveOperation?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'source' | 'document' | 'operationName' | 'operation'
     >,
   ): ValueOrPromise<void>;
   didEncounterErrors?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'source' | 'errors'
     >,
   ): ValueOrPromise<void>;
@@ -54,19 +57,19 @@ export interface GraphQLRequestListener<TContext = Record<string, any>> {
   // response is used.
   responseForOperation?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'source' | 'document' | 'operationName' | 'operation'
     >,
-  ): ValueOrPromise<GraphQLResponse | null>;
+  ): ValueOrPromise<TResponse | null>;
   executionDidStart?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'source' | 'document' | 'operationName' | 'operation'
     >,
   ): ((err?: Error) => void) | void;
   willSendResponse?(
     requestContext: WithRequired<
-      GraphQLRequestContext<TContext>,
+      GraphQLRequestContext<TContext, TResponse>,
       'metrics' | 'response'
     >,
   ): ValueOrPromise<void>;

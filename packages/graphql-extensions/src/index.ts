@@ -28,7 +28,10 @@ type StartHandlerInvoker<TContext = any> = (
   ext: GraphQLExtension<TContext>,
 ) => EndHandler | void;
 
-export class GraphQLExtension<TContext = any> {
+export class GraphQLExtension<
+  TContext = any,
+  TResponse extends GraphQLResponse = GraphQLResponse,
+> {
   public requestDidStart?(o: {
     request: Pick<Request, 'url' | 'method' | 'headers'>;
     queryString?: string;
@@ -38,7 +41,7 @@ export class GraphQLExtension<TContext = any> {
     persistedQueryHit?: boolean;
     persistedQueryRegister?: boolean;
     context: TContext;
-    requestContext: GraphQLRequestContext<TContext>;
+    requestContext: GraphQLRequestContext<TContext, TResponse>;
   }): EndHandler | void;
   public parsingDidStart?(o: { queryString: string }): EndHandler | void;
   public validationDidStart?(): EndHandler | void;
@@ -48,10 +51,12 @@ export class GraphQLExtension<TContext = any> {
 
   public didEncounterErrors?(errors: ReadonlyArray<GraphQLError>): void;
 
-  public willSendResponse?(o: {
-    graphqlResponse: GraphQLResponse;
+  public willSendResponse?<
+    TResponse extends GraphQLResponse = GraphQLResponse
+  >(o: {
+    graphqlResponse: TResponse;
     context: TContext;
-  }): void | { graphqlResponse: GraphQLResponse; context: TContext };
+  }): void | { graphqlResponse: TResponse; context: TContext };
 
   public willResolveField?(
     source: any,
@@ -63,7 +68,10 @@ export class GraphQLExtension<TContext = any> {
   public format?(): [string, any] | undefined;
 }
 
-export class GraphQLExtensionStack<TContext = any> {
+export class GraphQLExtensionStack<
+  TContext = any,
+  TResponse extends GraphQLResponse = GraphQLResponse,
+> {
   public fieldResolver?: GraphQLFieldResolver<any, any>;
 
   private extensions: GraphQLExtension<TContext>[];
@@ -82,7 +90,7 @@ export class GraphQLExtensionStack<TContext = any> {
     persistedQueryRegister?: boolean;
     context: TContext;
     extensions?: Record<string, any>;
-    requestContext: GraphQLRequestContext<TContext>;
+    requestContext: GraphQLRequestContext<TContext, TResponse>;
   }): EndHandler {
     return this.handleDidStart(
       ext => ext.requestDidStart && ext.requestDidStart(o),
@@ -115,10 +123,10 @@ export class GraphQLExtensionStack<TContext = any> {
     });
   }
 
-  public willSendResponse(o: {
-    graphqlResponse: GraphQLResponse;
+  public willSendResponse<TResponse extends GraphQLResponse = GraphQLResponse>(o: {
+    graphqlResponse: TResponse;
     context: TContext;
-  }): { graphqlResponse: GraphQLResponse; context: TContext } {
+  }): { graphqlResponse: TResponse; context: TContext } {
     let reference = o;
     // Reverse the array, since this is functions as an end handler
     [...this.extensions].reverse().forEach(extension => {

@@ -127,7 +127,7 @@ function cacheKeyString(key: CacheKey) {
   return sha(JSON.stringify(key));
 }
 
-function isGraphQLQuery(requestContext: GraphQLRequestContext<any>) {
+function isGraphQLQuery(requestContext: GraphQLRequestContext<any, any>) {
   return (
     requestContext.operation && requestContext.operation.operation === 'query'
   );
@@ -137,9 +137,9 @@ export default function plugin(
   options: Options = Object.create(null),
 ): ApolloServerPlugin {
   return {
-    requestDidStart(
-      outerRequestContext: GraphQLRequestContext<any>,
-    ): GraphQLRequestListener<any> {
+    requestDidStart<TContext, TResponse extends GraphQLResponse>(
+      outerRequestContext: GraphQLRequestContext<TContext, TResponse>,
+    ): GraphQLRequestListener<TContext, TResponse> {
       const cache = new PrefixingKeyValueCache(
         options.cache || outerRequestContext.cache!,
         'fqc:',
@@ -152,7 +152,7 @@ export default function plugin(
       return {
         async responseForOperation(
           requestContext,
-        ): Promise<GraphQLResponse | null> {
+        ): Promise<TResponse | null> {
           requestContext.metrics.responseCacheHit = false;
 
           if (!isGraphQLQuery(requestContext)) {
@@ -161,7 +161,7 @@ export default function plugin(
 
           async function cacheGet(
             contextualCacheKeyFields: ContextualCacheKey,
-          ): Promise<GraphQLResponse | null> {
+          ): Promise<TResponse | null> {
             const key = cacheKeyString({
               ...baseCacheKey!,
               ...contextualCacheKeyFields,
@@ -177,7 +177,9 @@ export default function plugin(
             requestContext.overallCachePolicy = value.cachePolicy;
             requestContext.metrics.responseCacheHit = true;
             age = Math.round((+new Date() - value.cacheTime) / 1000);
-            return { data: value.data };
+            // TODO(jesse) DEMONS
+            // So I'm now casting this to TResponse, but I don't want to.
+            return { data: value.data } as TResponse;
           }
 
           // Call hooks. Save values which will be used in willSendResponse as well.

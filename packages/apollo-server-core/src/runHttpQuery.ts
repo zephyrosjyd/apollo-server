@@ -199,8 +199,11 @@ export async function runHttpQuery(
   return processHTTPRequest(config, request);
 }
 
-export async function processHTTPRequest<TContext>(
-  options: WithRequired<GraphQLOptions<TContext>, 'cache' | 'plugins'> & {
+export async function processHTTPRequest<
+  TContext,
+  TResponse extends GraphQLResponse = GraphQLResponse
+>(
+  options: WithRequired<GraphQLOptions<TContext, any, TResponse>, 'cache' | 'plugins'> & {
     context: TContext;
   },
   httpRequest: HttpQueryRequest,
@@ -246,7 +249,7 @@ export async function processHTTPRequest<TContext>(
 
   function buildRequestContext(
     request: GraphQLRequest,
-  ): GraphQLRequestContext<TContext> {
+  ): GraphQLRequestContext<TContext, TResponse> {
     // FIXME: We currently shallow clone the context for every request,
     // but that's unlikely to be what people want.
     // We allow passing in a function for `context` to ApolloServer,
