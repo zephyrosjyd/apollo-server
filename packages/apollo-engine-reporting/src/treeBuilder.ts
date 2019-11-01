@@ -18,7 +18,7 @@ export class EngineReportingTreeBuilder {
   private nodes = new Map<string, Trace.Node>([
     [rootResponsePath, this.rootNode],
   ]);
-  private rewriteError?: (err: GraphQLError) => GraphQLError | null;
+  private readonly rewriteError?: (err: GraphQLError) => GraphQLError | null;
 
   public constructor(options: {
     rewriteError?: (err: GraphQLError) => GraphQLError | null;

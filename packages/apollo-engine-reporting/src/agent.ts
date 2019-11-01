@@ -212,8 +212,8 @@ const serviceHeaderDefaults = {
 // EngineReportingExtensions for each request and sends batches of trace reports
 // to the Engine server.
 export class EngineReportingAgent<TContext = any> {
-  private options: EngineReportingOptions<TContext>;
-  private apiKey: string;
+  private readonly options: EngineReportingOptions<TContext>;
+  private readonly apiKey: string;
   private reports: { [schemaHash: string]: FullTracesReport } = Object.create(
     null,
   );
