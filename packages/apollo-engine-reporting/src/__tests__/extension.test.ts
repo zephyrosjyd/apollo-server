@@ -65,11 +65,15 @@ test('trace construction', async () => {
     addTrace,
     'schema-hash',
   );
+  // XXX This test will not be a true mirror of how Apollo Server will work
+  // because the extension relies on certain behavior that happens in the
+  // requestPipeline.
   const stack = new GraphQLExtensionStack([reportingExtension]);
   const requestDidEnd = stack.requestDidStart({
     request: new Request('http://localhost:123/foo') as any,
     queryString: query,
     requestContext: {
+      metrics: {},
       request: {
         query,
         operationName: 'q',
@@ -89,6 +93,19 @@ test('trace construction', async () => {
   });
   requestDidEnd();
   // XXX actually write some tests
+
+  expect(traces.length).toBe(1);
+  const trace = traces[0] as any;
+  expect(trace.schemaHash).toBe("schema-hash");
+  expect(trace.trace.root.child.length).toBe(2);
+
+  const nodeForBoolean = trace.trace.root.child.find( (node: any) => {return node.responseName === 'aBoolean';});
+  expect(nodeForBoolean).toBeTruthy();
+  expect(nodeForBoolean).toMatchObject({
+    responseName: "aBoolean",
+    type: "Boolean",
+    parentType: "Query"
+  });
 });
 
 /**
