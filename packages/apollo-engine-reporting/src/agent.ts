@@ -91,7 +91,10 @@ export interface EngineReportingOptions<TContext> {
    * Minimum back-off for retries. Defaults to 100ms.
    */
   minimumRetryDelayMs?: number;
-  // TODO: Give this thing a better name
+  // Whether to include the entire document in the trace if the operation
+  // was a GraphQL validation error (i.e. failed the validation phase). This
+  // will be included as a separate field on the trace and the operation name
+  // and signature will always be reported with a static identifier.
   sendOperationDocumentsOnValidationFailure?: boolean;
   /**
    * By default, errors that occur when sending trace reports to Engine servers
@@ -322,7 +325,7 @@ export class EngineReportingAgent<TContext = any> {
     // since we only assess the operation signature / document as part of
     // building up the key to the map, it makes more sense to keep both here
     // or indicate GraphQL validation failure as an argument to this function.
-    if (graphqlValidationFailure && queryString) {
+    if (graphqlValidationFailure && queryString && this.options.sendOperationDocumentsOnValidationFailure) {
       trace.operationBodyOnValidationFailure = queryString
     }
 
@@ -503,9 +506,6 @@ export class EngineReportingAgent<TContext = any> {
       // same, which we probably don't really need to expose? Maybe
       // we don't?
       graphqlValidationFailure = true;
-      if (this.options.sendOperationDocumentsOnValidationFailure === true) {
-        return { signature: queryString as string, graphqlValidationFailure};
-      }
       return { signature: validationErrorStaticIdentifier, graphqlValidationFailure};
     }
 
