@@ -9,7 +9,7 @@ describe('signature cache key', () => {
     expect(signatureCacheKey('abc123', '')).toEqual('abc123');
   });
 
-  it('generates without the operationName', () => {
+  it('generates with the operationName', () => {
     expect(signatureCacheKey('abc123', 'myOperation')).toEqual(
       'abc123:myOperation',
     );

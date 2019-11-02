@@ -92,7 +92,7 @@ export interface EngineReportingOptions<TContext> {
    */
   minimumRetryDelayMs?: number;
   // TODO: Give this thing a better name
-  reportGraphQLValidationFailuresWithStaticIdentifier?: boolean;
+  sendOperationDocumentsOnValidationFailure?: boolean;
   /**
    * By default, errors that occur when sending trace reports to Engine servers
    * will be logged to standard error. Specify this function to process errors
@@ -189,7 +189,7 @@ export interface EngineReportingOptions<TContext> {
   generateClientInfo?: GenerateClientInfo<TContext>;
 }
 
-const validationErrorStaticIdentifier = "validationError";
+const validationErrorStaticIdentifier = "GraphQLValidationFailure";
 
 export interface AddTraceArgs {
   trace: Trace;
@@ -306,17 +306,27 @@ export class EngineReportingAgent<TContext = any> {
     if (protobufError) {
       throw new Error(`Error encoding trace: ${protobufError}`);
     }
-    const encodedTrace = Trace.encode(trace).finish();
 
-    const signature = await this.getTraceSignature({
+    const { signature, graphqlValidationFailure } = await this.getTraceSignature({
       queryHash,
       documentAST,
       queryString,
       operationName,
     });
 
-    const operationNameOrStatic = signature === validationErrorStaticIdentifier ?
+    const operationNameOrStatic = graphqlValidationFailure ?
       validationErrorStaticIdentifier : operationName;
+
+    // Optionally store the operation body on validation failure as part of
+    // the trace. This could probably be done within the treebuilder, but
+    // since we only assess the operation signature / document as part of
+    // building up the key to the map, it makes more sense to keep both here
+    // or indicate GraphQL validation failure as an argument to this function.
+    if (graphqlValidationFailure && queryString) {
+      trace.operationBodyOnValidationFailure = queryString
+    }
+
+    const encodedTrace = Trace.encode(trace).finish();
 
     const statsReportKey = `# ${operationNameOrStatic || '-'}\n${signature}`;
     if (!report.tracesPerQuery.hasOwnProperty(statsReportKey)) {
@@ -468,7 +478,7 @@ export class EngineReportingAgent<TContext = any> {
     operationName: string;
     documentAST?: DocumentNode;
     queryString?: string;
-  }): Promise<string> {
+  }): Promise<{signature: string, graphqlValidationFailure: boolean}> {
     if (!documentAST && !queryString) {
       // This shouldn't happen: one of those options must be passed to runQuery.
       throw new Error('No queryString or parsedQuery?');
@@ -481,23 +491,22 @@ export class EngineReportingAgent<TContext = any> {
     // `await` the `signature` if it's a Promise, prior to putting it
     // on the stack of traces to deliver to the cloud.
     const cachedSignature = await this.signatureCache.get(cacheKey);
+    let graphqlValidationFailure = false;
 
     if (cachedSignature) {
-      return cachedSignature;
+      return { signature: cachedSignature, graphqlValidationFailure};
     }
 
     if (!documentAST) {
-      if (this.options.reportGraphQLValidationFailuresWithStaticIdentifier === true) {
-        return validationErrorStaticIdentifier;
+      // We used to always send the entire document as the signature
+      // whenever validation failed. This option allows users to do the
+      // same, which we probably don't really need to expose? Maybe
+      // we don't?
+      graphqlValidationFailure = true;
+      if (this.options.sendOperationDocumentsOnValidationFailure === true) {
+        return { signature: queryString as string, graphqlValidationFailure};
       }
-      // We didn't get an AST, possibly because of a parse failure. Let's just
-      // use the full query string.
-      //
-      // XXX This does mean that even if you use a calculateSignature which
-      //     hides literals, you might end up sending literals for queries
-      //     that fail parsing or validation. Provide some way to mask them
-      //     anyway?
-      return queryString as string;
+      return { signature: validationErrorStaticIdentifier, graphqlValidationFailure};
     }
 
     const generatedSignature = (this.options.calculateSignature ||
@@ -506,7 +515,7 @@ export class EngineReportingAgent<TContext = any> {
     // Intentionally not awaited so the cache can be written to at leisure.
     this.signatureCache.set(cacheKey, generatedSignature);
 
-    return generatedSignature;
+    return {signature: generatedSignature, graphqlValidationFailure};
   }
 
   private async sendAllReportsAndReportErrors(): Promise<void> {

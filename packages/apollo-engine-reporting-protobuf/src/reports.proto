@@ -202,6 +202,10 @@ message Trace {
 	// instead.
 	string signature = 19;
 
+	// Optional: when GraphQL validation fails, this field can include the entirety of the message
+	// body for users to dig into the set of operations that are failing validation.
+	string operationBodyOnValidationFailure = 27;
+
 	Details details = 6;
 
 	// Note: engineproxy always sets client_name, client_version, and client_address to "none".
