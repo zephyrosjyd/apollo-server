@@ -5,8 +5,8 @@ import {
   SelectionSetNode,
   VariableDefinitionNode,
 } from 'graphql';
-import { astSerializer, queryPlanSerializer } from './snapshotSerializers';
-import prettyFormat from 'pretty-format';
+// import { astSerializer, queryPlanSerializer } from './snapshotSerializers';
+// import prettyFormat from 'pretty-format';
 
 export type ResponsePath = (string | number)[];
 
@@ -49,7 +49,8 @@ export interface FlattenNode {
 }
 
 export function serializeQueryPlan(queryPlan: QueryPlan) {
-  return prettyFormat(queryPlan, {
-    plugins: [queryPlanSerializer, astSerializer],
-  });
+  return JSON.stringify(queryPlan);
+  // return prettyFormat(queryPlan, {
+  //   plugins: [queryPlanSerializer, astSerializer],
+  // });
 }
