@@ -202,9 +202,11 @@ message Trace {
 	// instead.
 	string signature = 19;
 
-	// Optional: when GraphQL validation fails, this field can include the entirety of the message
-	// body for users to dig into the set of operations that are failing validation.
+	// Optional: when GraphQL parsing or validation against the GraphQL schema fails, these fields
+	// can include reference to the operation being sent for users to dig into the set of operations
+	// that are failing validation.
 	string operationBodyOnValidationFailure = 27;
+	string operationNameOnValidationFailure = 28;
 
 	Details details = 6;
 
