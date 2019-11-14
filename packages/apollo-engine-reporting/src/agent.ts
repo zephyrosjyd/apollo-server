@@ -316,7 +316,7 @@ export class EngineReportingAgent<TContext = any> {
 
     let statsReportKey: string;
     // It's important to check parse failure first, since parse failures always
-    // indicate validation
+    // indicate validation failure
     if (gqlParseFailure) {
       statsReportKey = `## GraphQLParseFailure`;
       if (this.options.sendOperationDocumentsOnValidationFailure && queryString) {
