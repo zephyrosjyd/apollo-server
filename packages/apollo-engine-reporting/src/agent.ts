@@ -321,13 +321,13 @@ export class EngineReportingAgent<TContext = any> {
       statsReportKey = `## GraphQLParseFailure`;
       if (this.options.sendOperationDocumentsOnValidationFailure && queryString) {
         trace.operationBodyOnValidationFailure = queryString;
-        trace.operationNameOnValidationFailure = operationName
+        trace.operationNameOnValidationFailure = operationName;
       }
     } else if (gqlValidationFailure || !documentAST) {
       statsReportKey = `## GraphQLValidationFailure`;
       if (this.options.sendOperationDocumentsOnValidationFailure && queryString) {
         trace.operationBodyOnValidationFailure = queryString;
-        trace.operationNameOnValidationFailure = operationName
+        trace.operationNameOnValidationFailure = operationName;
       }
     } else {
       const signature = await this.getTraceSignature({
