@@ -67,7 +67,9 @@ test('trace construction', async () => {
   );
   // XXX This test will not be a true mirror of how Apollo Server will work
   // because the extension relies on certain behavior that happens in the
-  // requestPipeline.
+  // requestPipeline. For instance, the requestPipeline adds `operationName`
+  // to the requestContext during a certain phase of execution, which the
+  // reporting extension is relying on.
   const stack = new GraphQLExtensionStack([reportingExtension]);
   const requestDidEnd = stack.requestDidStart({
     request: new Request('http://localhost:123/foo') as any,
