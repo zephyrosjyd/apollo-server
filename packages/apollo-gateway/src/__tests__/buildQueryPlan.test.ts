@@ -5,7 +5,11 @@ import {
   GraphQLSchemaValidationError,
 } from 'apollo-graphql';
 import gql from 'graphql-tag';
-import { composeServices, buildFederatedSchema } from '@apollo/federation';
+import {
+  composeServices,
+  buildFederatedSchema,
+  composeAndValidate,
+} from '@apollo/federation';
 
 import { buildQueryPlan, buildOperationContext } from '../buildQueryPlan';
 
@@ -782,6 +786,151 @@ describe('buildQueryPlan', () => {
                   reviews {
                     body
                   }
+                }
+              }
+            },
+          },
+        },
+      }
+    `);
+  });
+
+  it(`demonstrates the bug`, () => {
+    const kotlin = {
+      typeDefs: gql`
+        type Query {
+          blah: String
+        }
+
+        extend type Mutation {
+          service: ServiceMutation
+        }
+
+        type ServiceMutation @key(fields: "id") {
+          id: ID! @deprecated(reason: "blah")
+          service: Service!
+          undelete: Service
+        }
+
+        type Service @key(fields: "id") {
+          id: ID!
+        }
+      `,
+      name: 'kotlin',
+    };
+
+    const registry = {
+      typeDefs: gql`
+        extend type Service @key(fields: "id") {
+          id: ID! @external
+        }
+
+        extend type ServiceMutation @key(fields: "service { id }") {
+          id: ID! @external @deprecated(reason: "Use Service.id")
+          service: Service! @external
+          """
+          Create a new API key and also write the storage secret for that API key.
+          The storage secret allows users to fetch files from GCS like operation manifests and composition artifacts for federation.
+          Storage secrets need to be accessible via a service's API key, so we need to couple the creation of these files with API key creation
+          """
+          createApiKeyAndWriteStorageSecret(keyName: String): String
+            @requires(
+              fields: """
+              service { id }
+              """
+            )
+        }
+      `,
+      name: 'registry',
+    };
+
+    const { errors, schema } = composeAndValidate([kotlin, registry]);
+
+    expect(errors).toHaveLength(0);
+
+    const serviceMutationKeys = schema.getType('ServiceMutation')!.federation!
+      .keys;
+    expect(serviceMutationKeys).toMatchInlineSnapshot(`
+      Object {
+        "kotlin": Array [
+          Array [
+            id,
+          ],
+        ],
+        "registry": Array [
+          Array [
+            service {
+              id
+            },
+          ],
+        ],
+      }
+    `);
+
+    const kotlinQuery = gql`
+      mutation One {
+        service(id: "test") {
+          undelete
+        }
+      }
+    `;
+
+    const kotlinQueryPlan = buildQueryPlan(
+      buildOperationContext(schema, kotlinQuery),
+    );
+
+    expect(kotlinQueryPlan).toMatchInlineSnapshot(`
+      QueryPlan {
+        Fetch(service: "kotlin") {
+          {
+            service(id: "test") {
+              undelete
+            }
+          }
+        },
+      }
+    `);
+
+    const registryQuery = gql`
+      mutation Two {
+        service(id: "test") {
+          createApiKeyAndWriteStorageSecret(keyName: "Hello")
+        }
+      }
+    `;
+
+    const registryQueryPlan = buildQueryPlan(
+      buildOperationContext(schema, registryQuery),
+    );
+
+    expect(registryQueryPlan).toMatchInlineSnapshot(`
+      QueryPlan {
+        Sequence {
+          Fetch(service: "kotlin") {
+            {
+              service(id: "test") {
+                __typename
+                service {
+                  id
+                  id
+                }
+              }
+            }
+          },
+          Flatten(path: "service") {
+            Fetch(service: "registry") {
+              {
+                ... on ServiceMutation {
+                  __typename
+                  service {
+                    id
+                    id
+                  }
+                }
+              } =>
+              {
+                ... on ServiceMutation {
+                  createApiKeyAndWriteStorageSecret(keyName: "Hello")
                 }
               }
             },
