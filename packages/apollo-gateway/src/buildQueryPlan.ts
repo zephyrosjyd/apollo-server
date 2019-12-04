@@ -403,12 +403,15 @@ function splitFields(
         continue;
       }
 
-      if (isObjectType(parentType) && scope.possibleTypes.includes(parentType)) {
+      if (
+        isObjectType(parentType) &&
+        scope.possibleTypes.includes(parentType)
+      ) {
         // If parent type is an object type, we can directly look for the right
         // group.
         const group = groupForField(field as Field<GraphQLObjectType>);
         group.fields.push(
-          completeField(
+          ...completeField(
             context,
             scope as Scope<typeof parentType>,
             group,
@@ -446,19 +449,20 @@ function splitFields(
           for (const runtimeParentType of runtimeParentTypes) {
             // We need to adjust the fields to contain the right fieldDef for
             // their runtime parent type.
-
             const fieldDef = context.getFieldDef(
               runtimeParentType,
               field.fieldNode,
             );
 
-            const fieldsWithRuntimeParentType = fieldsForResponseName.map(field => ({
-              ...field,
-              fieldDef,
-            }));
+            const fieldsWithRuntimeParentType = fieldsForResponseName.map(
+              field => ({
+                ...field,
+                fieldDef,
+              }),
+            );
 
             group.fields.push(
-              completeField(
+              ...completeField(
                 context,
                 context.newScope(runtimeParentType, scope),
                 group,
@@ -479,50 +483,75 @@ function completeField(
   parentGroup: FetchGroup,
   path: ResponsePath,
   fields: FieldSet,
-): Field {
-  const { fieldNode, fieldDef } = fields[0];
-  const returnType = getNamedType(fieldDef.type);
+): Field[] {
+  const uniqueFieldsByReturnType: Map<string, Field[]> = new Map();
 
-  if (!isCompositeType(returnType)) {
-    // FIXME: We should look at all field nodes to make sure we take directives
-    // into account (or remove directives for the time being).
-    return { scope, fieldNode, fieldDef };
-  } else {
-    // For composite types, we need to recurse.
-
-    const fieldPath = addPath(path, getResponseName(fieldNode), fieldDef.type);
-
-    const subGroup = new FetchGroup(parentGroup.serviceName);
-    subGroup.mergeAt = fieldPath;
-
-    subGroup.providedFields = context.getProvidedFields(
-      fieldDef,
-      parentGroup.serviceName,
+  fields.forEach(field => {
+    const existing = uniqueFieldsByReturnType.get(
+      field.fieldDef.type.toString(),
     );
-
-    // For abstract types, we always need to request `__typename`
-    if (isAbstractType(returnType)) {
-      subGroup.fields.push({
-        scope: context.newScope(returnType, scope),
-        fieldNode: typenameField,
-        fieldDef: TypeNameMetaFieldDef,
-      });
+    if (existing) {
+      existing.push(field);
+    } else {
+      uniqueFieldsByReturnType.set(field.fieldDef.type.toString(), [field]);
     }
+  });
 
-    const subfields = collectSubfields(context, returnType, fields);
-    splitSubfields(context, fieldPath, subfields, subGroup);
+  return [...uniqueFieldsByReturnType.values()].map(batchedFieldsByType => {
+    // In situations where the field name are the same, but the return type are diffent
+    // (e.g. in a selection set of a union), we need to iterate over
+    const { fieldNode, fieldDef } = batchedFieldsByType[0];
+    const returnType = getNamedType(fieldDef.type);
 
-    parentGroup.otherDependentGroups.push(...subGroup.dependentGroups);
+    if (!isCompositeType(returnType)) {
+      // FIXME: We should look at all field nodes to make sure we take directives
+      // into account (or remove directives for the time being).
+      return { scope, fieldNode, fieldDef };
+    } else {
+      // For composite types, we need to recurse.
 
-    return {
-      scope,
-      fieldNode: {
-        ...fieldNode,
-        selectionSet: selectionSetFromFieldSet(subGroup.fields, returnType),
-      },
-      fieldDef,
-    };
-  }
+      const fieldPath = addPath(
+        path,
+        getResponseName(fieldNode),
+        fieldDef.type,
+      );
+
+      const subGroup = new FetchGroup(parentGroup.serviceName);
+      // console.log(subGroup.fields)
+      subGroup.mergeAt = fieldPath;
+
+      subGroup.providedFields = context.getProvidedFields(
+        fieldDef,
+        parentGroup.serviceName,
+      );
+
+      // For abstract types, we always need to request `__typename`
+      if (isAbstractType(returnType)) {
+        subGroup.fields.push({
+          scope: context.newScope(returnType, scope),
+          fieldNode: typenameField,
+          fieldDef: TypeNameMetaFieldDef,
+        });
+      }
+      const subfields = collectSubfields(
+        context,
+        returnType,
+        batchedFieldsByType,
+      );
+      splitSubfields(context, fieldPath, subfields, subGroup);
+
+      parentGroup.otherDependentGroups.push(...subGroup.dependentGroups);
+
+      return {
+        scope,
+        fieldNode: {
+          ...fieldNode,
+          selectionSet: selectionSetFromFieldSet(subGroup.fields, returnType),
+        },
+        fieldDef,
+      };
+    }
+  });
 }
 
 function collectFields(
@@ -561,7 +590,6 @@ function collectFields(
         if (!fragment) {
           continue;
         }
-
         collectFields(
           context,
           context.newScope(getFragmentCondition(fragment), scope),
@@ -602,7 +630,6 @@ export function collectSubfields(
 
   for (const field of fields) {
     const selectionSet = field.fieldNode.selectionSet;
-
     if (selectionSet) {
       subfields = collectFields(
         context,
