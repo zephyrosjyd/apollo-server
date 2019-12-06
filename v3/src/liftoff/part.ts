@@ -1,44 +1,34 @@
 import { isTemplateStringsArray, ValueType, ValueTypeOf } from "../utilities/types"
 import { setLocation } from "./loc"
 
-interface Ref<T> {
-  <X extends T = T>(value?: Input<X>): Output<X>
+type Ref<O extends (any[] | void), I extends (any[] | void) = O> =
+  I extends void
+    ? Source<O>
+    :
+  I extends any[]
+    ? Source<O> & Sink<I>
+    :
+  never
+
+interface Scalar<T> extends Memoized<
+  Ref<[T], [T]> & {
+    <X extends T>(): Scalar<X>
+  }
+> {}
+
+interface Sink<I extends any[]> {
+  <X extends I>(...input:  X): Source<X>
 }
 
-type Input<T> =
-  T extends Ref<infer V> ? V | T
-   :
-   T | Ref<T>
+interface Source<_X> {}
 
-type Output<T> =
-  T extends Ref<any> ? T
-  :
-  T extends ValueType ? Ref<ValueTypeOf<T>>
-  :
-  void
+function emit<I extends any[]>(_ref: Ref<void, I>, _value: I) {
 
-const sink = <T>(_type?: Ref<T>, defaultValue?: Input<T>) => {
-  const connect: Memoized<Ref<T>> = memoized(<V extends T = T>(value?: Input<V>) => {
-    const definition = sink(connect, value)
-    return definition
-  })
-  return connect
 }
-
-type Memoized<F extends Function> = ((site: TemplateStringsArray, ...deps: any[]) => F) & F
-
-
-const int = sink<number>()
-const asdf = int`abcd` (2)
-
-asdf(11)
-
-
-
 
 
 export const memoized = <F extends Function>(func: F): Memoized<F> => (
-  (...args: any[]) => {
+  function consumeTag(...args: any[]) {
     const [site, ...deps] = args
     if (isTemplateStringsArray(site)) {
       setLocation(site, 2)
@@ -47,6 +37,42 @@ export const memoized = <F extends Function>(func: F): Memoized<F> => (
     return func
   }
 ) as any
+
+export const scalar = memoized(<T>(base?: Ref<any, [T]>): Scalar<T> => {
+  const connect = memoized(<X extends T>(value?: X): Scalar<X> => {
+    if (!value) return scalar(connect)
+    base && value && emit(connect, [value])
+    return connect
+  })
+  return connect
+})
+
+
+
+//   const connect: Memoized<Ref<T>> = memoized(<V extends T = T>(value?: Input<V>) => {
+//     const definition = sink(connect, value)
+//     return definition
+//   })
+//   return connect
+// }
+
+type Memoized<F extends Function> = ((site: TemplateStringsArray, ...deps: any[]) => F) & F
+
+
+// const int = scalar<number>()
+// const asdf = int`abcd`(2)
+
+const obj = scalar `abcd` <object>()
+const Schema = obj<{ type: string }>()
+
+Schema `some sub-ref` ()
+  `a value`({ type: 'asdf' })
+
+
+
+
+
+
 
 // type Part = (...args: any[]) => Ref<any>
 
