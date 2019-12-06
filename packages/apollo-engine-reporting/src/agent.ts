@@ -97,7 +97,7 @@ export interface EngineReportingOptions<TContext> {
   // and the operation name and signature will always be reported with a static
   // identifier. Whether the operation was a parse failure or a validation
   // failure will be embedded within the stats report key itself
-  sendOperationDocumentsOnValidationFailure?: boolean;
+  sendOperationDocumentsOnUnexecutableOperation?: boolean;
   /**
    * By default, errors that occur when sending trace reports to Engine servers
    * will be logged to standard error. Specify this function to process errors
@@ -202,7 +202,6 @@ export interface AddTraceArgs {
   queryString?: string;
   documentAST?: DocumentNode;
   gqlValidationFailure: boolean;
-  gqlParseFailure: boolean;
 }
 
 const serviceHeaderDefaults = {
@@ -289,7 +288,6 @@ export class EngineReportingAgent<TContext = any> {
     operationName,
     queryString,
     schemaHash,
-    gqlParseFailure,
     gqlValidationFailure,
   }: AddTraceArgs): Promise<void> {
     // Ignore traces that come in after stop().
@@ -317,17 +315,17 @@ export class EngineReportingAgent<TContext = any> {
     let statsReportKey: string;
     // It's important to check parse failure first, since parse failures always
     // indicate validation failure
-    if (gqlParseFailure) {
+    if (!documentAST) {
       statsReportKey = `## GraphQLParseFailure`;
-      if (this.options.sendOperationDocumentsOnValidationFailure && queryString) {
-        trace.operationBodyOnValidationFailure = queryString;
-        trace.operationNameOnValidationFailure = operationName;
+      if (this.options.sendOperationDocumentsOnUnexecutableOperation && queryString) {
+        trace.unexecutedOperationBody = queryString;
+        trace.unexecutedOperationName = operationName;
       }
-    } else if (gqlValidationFailure || !documentAST) {
-      statsReportKey = `## GraphQLValidationFailure`;
-      if (this.options.sendOperationDocumentsOnValidationFailure && queryString) {
-        trace.operationBodyOnValidationFailure = queryString;
-        trace.operationNameOnValidationFailure = operationName;
+    } else if (gqlValidationFailure) {
+      statsReportKey = `## GraphQLFailure`;
+      if (this.options.sendOperationDocumentsOnUnexecutableOperation && queryString) {
+        trace.unexecutedOperationName = queryString;
+        trace.unexecutedOperationName = operationName;
       }
     } else {
       const signature = await this.getTraceSignature({
@@ -498,14 +496,6 @@ export class EngineReportingAgent<TContext = any> {
 
     if (cachedSignature) {
       return cachedSignature;
-    }
-
-    if (!documentAST) {
-      // We used to always send the entire document as the signature
-      // whenever validation failed. Now this is a static identifier, and
-      // users may set the `sendOperationDocumentsOnValidationFailure`
-      // option instead.
-      throw new Error('')
     }
 
     const generatedSignature = (this.options.calculateSignature ||

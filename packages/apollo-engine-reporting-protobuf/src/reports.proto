@@ -205,8 +205,8 @@ message Trace {
 	// Optional: when GraphQL parsing or validation against the GraphQL schema fails, these fields
 	// can include reference to the operation being sent for users to dig into the set of operations
 	// that are failing validation.
-	string operationBodyOnValidationFailure = 27;
-	string operationNameOnValidationFailure = 28;
+	string unexecutedOperationBody = 27;
+	string unexecutedOperationName = 28;
 
 	Details details = 6;
 
