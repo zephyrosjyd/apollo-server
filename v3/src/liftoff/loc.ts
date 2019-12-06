@@ -28,8 +28,8 @@ export class Location {
   /**
    * Create a location describing a point in the source.
    *
-   * @param error {Error} an Error whose stack includes the location
-   * @param depth {number} the index of the stack frame holding the location
+   * @param error _an Error whose stack includes the location_
+   * @param depth _the index of the stack frame holding the location_
    */
   constructor(public readonly error: Error, public readonly depth: number) {}
 
@@ -48,10 +48,30 @@ export class Location {
   }
 }
 
+/**
+ * Set the source location of an object to be on the current stack.
+ *
+ * Does nothing if the object's location is already set. If the object's
+ * location hasn't already been set, retrieves the stack (by constructing
+ * an Error and parsing its `stack` property) and sets the object's location
+ * to the stack frame at `depth`.
+ *
+ * @param of _the object whose location to set_
+ * @param depth _the index of the stack frame holding the location **(default=1)**_
+ */
+export function setLocation(of: any, depth?: number): void
 
-export function setLocation(of: any): void
+/**
+ * Set the source location of an object to be the location of another object.
+ *
+ * Does nothing if the object's location is already set. If the object's
+ * location hasn't already been set, retrieves `src`'s location and sets it
+ * as the object's location.
+ *
+ * @param of _the object whose location to set_
+ * @param src _the object whose location will be used_
+ */
 export function setLocation(of: any, src: object): void
-export function setLocation(of: any, depth: number): void
 
 export function setLocation(of: any, srcOrDepth: object | number = 1) {
   if (locations.has(of)) return
@@ -59,7 +79,7 @@ export function setLocation(of: any, srcOrDepth: object | number = 1) {
     ? new Location(new Error, srcOrDepth)
     :
     (getLocation(srcOrDepth) || new Location(new Error, 1))
-  locations.set(of, loc)
+  loc && locations.set(of, loc)
 }
 
 export function getLocation(of: object) {

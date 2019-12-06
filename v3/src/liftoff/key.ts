@@ -8,10 +8,11 @@ export interface Key {
   equals(other: Key): boolean
 }
 
-export type Keyable = (key: Key) => any
+export type Keyable = (key: Key) => Function
+type TemplateParams = [TemplateStringsArray, ...any[]]
 
 export type Keyed<F extends Keyable> =
-  ((parts: TemplateStringsArray, ...subs: any[]) => ReturnType<F>) & ReturnType<F>
+  ((...key: TemplateParams) => ReturnType<F>) & ReturnType<F>
 
 export const keyed = <F extends Keyable>(func: F): Keyed<F> => (
   (...args: any[]) => {
@@ -24,7 +25,7 @@ export const keyed = <F extends Keyable>(func: F): Keyed<F> => (
   }
 ) as any
 
-const anonymous = (): Key => {
+function anonymous(): Key {
   const site = Object.assign([], {raw: []})
   setLocation(site, 3)
   return new DepKey(site)

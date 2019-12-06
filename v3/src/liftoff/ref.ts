@@ -23,7 +23,7 @@ export interface Scalar<T> extends Ref<T> {
   /**
    * Provide a definition for this ref.
    *
-   * @param value {T | Ref<T>} the definition
+   * @param value _the definition value, or ref_
    */
   (value: T | Ref<T>): void
   (tag: TemplateStringsArray, ...deps: any[]): (value: T | Ref<T>) => void
@@ -31,7 +31,7 @@ export interface Scalar<T> extends Ref<T> {
   /**
    * Provide a definition for this ref.
    *
-   * @param value {T | Ref<T>} the definition
+   * @param value _the definition value or ref_
    */
   def(value: T | Ref<T>): void
   def(tag: TemplateStringsArray, ...deps: any[]): (value: T | Ref<T>) => void

@@ -1,6 +1,28 @@
 export type AnyFunc = (...args: any[]) => any
 
 export type ValueType = string | number | bigint | boolean | symbol | null | undefined
+
+export type ValueTypeOf<T> =
+  T extends string
+    ? string
+    :
+  T extends number
+    ? number
+    :
+  T extends bigint
+    ? bigint
+    :
+  T extends boolean
+    ? boolean
+    :
+  T extends symbol
+    ? symbol
+    :
+  T extends null
+    ? null
+    :
+    undefined
+
 export const isValueType = (o: any): o is ValueType => !isReferenceType(o)
 
 export type ReferenceType = object | AnyFunc
