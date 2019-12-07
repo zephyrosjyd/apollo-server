@@ -1,4 +1,4 @@
-export type AnyFunc = (...args: any[]) => any
+export type AnyFunc = (this: any, ...args: any[]) => any
 
 export type ValueType = string | number | bigint | boolean | symbol | null | undefined
 
