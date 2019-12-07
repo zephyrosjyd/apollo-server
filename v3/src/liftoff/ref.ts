@@ -1,127 +1,98 @@
+import { remember, Key, getKey, Memoized, getSite } from './memo'
 import { setLocation, getLocation } from './loc'
-import { keyed } from './key'
-import { def, Bond, trace } from './pattern'
+import { AnyFunc } from '../utilities/types'
+import { REPR, toString } from './repr'
 
-export interface ScalarType<T> {
-  <X extends T=T>(tag: TemplateStringsArray, ...deps: any[]): (defaultValue?: X | Ref<X>) => Scalar<X>
-}
+type Ref<O extends (any[] | void), I extends (any[] | void) = O> =
+  I extends void
+    ? Source<O>
+    :
+  I extends any[]
+    ? Source<O> & Sink<I>
+    :
+  never
 
-export const DEFAULT_VALUE = Symbol('Default value, if any // Ref<T>::[DEFAULT_VALUE]: T | Ref<T>')
-export const DEFAULT_BOND = Symbol('Bond for default value // Bond')
-export interface Ref<T> {
-  // [DEFAULT_VALUE] value holds the default value for this ref
-  [DEFAULT_VALUE]: T | Ref<T> | void
+const KEY = Symbol('Memo key')
+const BASE = Symbol('Scalar base type')
 
-  // [DEFAULT_BOND] holds a bond which applies to this ref and binds
-  // the [DEFAULT_VALUE]. Creating this once is useful because it lets us
-  // set location data for the definition to the source location where the
-  // ref was defined.
-  [DEFAULT_BOND]: Bond
-}
-
-export interface Scalar<T> extends Ref<T> {
-  /**
-   * Provide a definition for this ref.
-   *
-   * @param value _the definition value, or ref_
-   */
-  (value: T | Ref<T>): void
-  (tag: TemplateStringsArray, ...deps: any[]): (value: T | Ref<T>) => void
-
-  /**
-   * Provide a definition for this ref.
-   *
-   * @param value _the definition value or ref_
-   */
-  def(value: T | Ref<T>): void
-  def(tag: TemplateStringsArray, ...deps: any[]): (value: T | Ref<T>) => void
-}
-
-
-/**
- * Create a scalar type, which can be called to create scalar refs.
- */
-function createScalarType<T>
-  (tag: TemplateStringsArray, ..._deps: any[]): ScalarType<T> {
-    setLocation(tag, 2)
-    setLocation(createRef, tag)
-    const typeLabel = tag.join('___')
-    return createRef
-
-    /**
-     * Label a scalar ref.
-     *
-     * @param tag
-     * @param deps
-     */
-    function createRef<X extends T>(tag: TemplateStringsArray, ...deps: any[]) {
-      setLocation(tag, 2)
-      const label = tag.join('___')
-      return create
-
-      /**
-       * Create a scalar ref, optionally with a default value.
-       *
-       * @param defaultValue {T | Ref<T>}
-       */
-      function create(defaultValue?: X | Ref<X>): Scalar<X> {
-        const define: Scalar<X> = keyed(key => (value: X | Ref<X>) => {
-          def (key.site, ...key.deps) (define) (value)
-        }) as any
-
-        const defaultBond = typeof defaultValue !== 'undefined'
-          ? trace(() => def (tag, ...deps) (define) (defaultValue))[0].bond
-          : undefined
-
-        Object.defineProperties(define, {
-          [DEFAULT_VALUE]: {
-            value: defaultValue,
-          },
-          [DEFAULT_BOND]: {
-            value: defaultBond
-          },
-          toString: {
-            value() { return `${label} <${typeLabel}> (${getLocation(this)?.short})` },
-          },
-          def: {
-            value: define,
-          },
-        })
-
-        setLocation(define, tag)
-        refsByTag.set(tag, define)
-        refLabels.set(define, label)
-        refTypeLabels.set(define, typeLabel)
-        allRefs.add(define)
-
-        return define
-      }
-    }
+interface Scalar<T> extends Memoized<
+  Ref<[T], [T]> & {
+    <X extends T>(): Scalar<X>
+    [KEY]: Key
+    [BASE]: Scalar<any>
   }
+> {}
 
-
-export function getLabel(ref: object) {
-  return refLabels.get(ref)
+interface Sink<I extends any[]> {
+  <X extends I>(...input:  X): Source<X>
+  <X extends I>(source: Source<X>): Source<X>
 }
 
-export function getTypeLabel(ref: object) {
-  return refTypeLabels.get(ref)
+interface Reader<T, S=any, D=any> {
+  getValue(state: S): T
+  initialState?:  S
+  reduce?: (state: S, delta: D) => S
+  plan?(emit: (delta: D) => void): void
 }
 
-const refLabels = new WeakMap<any, string>()
-const refTypeLabels = new WeakMap<any, string>()
-const refsByTag = new WeakMap<any, Ref<any>>()
-const allRefs = new WeakSet<Ref<any>>()
+const READ = Symbol('Source<T>[READ]: Reader')
+interface Source<T> {
+  readonly [READ]: Reader<T>
+}
+export const isSource = <X>(o: any): o is Source<X> => !!o[READ]
 
-export const isRef = <T>(o: any): o is Ref<T> => allRefs.has(o)
+export interface CreateScalar {
+  <T>(base?: Ref<any, [T]>): Scalar<T>
+}
 
-export const str = createScalarType <string> `string`
-export const obj = createScalarType <object> `object`
-export const int = createScalarType <number> `int`
-export const float = createScalarType <number> `float`
-export const bool = createScalarType <boolean> `boolean`
-export const func = createScalarType <Function> `function`
+export const createScalar: Memoized<CreateScalar> =
+  remember(<T>(base?: Ref<any, [T]>): Scalar<T> => {
+    const scalar: Scalar<T> = Object.defineProperties(
+      remember(((...args: any[]) => {
+        if (args.length) {
+          const [source] = args
+          if (isSource<[T]>(source)) return source
+          return data(args)
+        }
+        return createScalar(scalar)
+      })), {
+        [REPR]: { value: repr },
+        [BASE]: { value: base },
+        [KEY]: { value: getKey() },
+        toString: { value: toString }
+      })
+    setLocation(scalar, getSite())
+    return scalar
+  })
+
+function repr(this: Scalar<any>) {
+  return `${
+    String.raw(...this[KEY])
+  }${
+    this[BASE]
+      ? ` <${String.raw(...this[BASE][KEY])}> `
+      : ''
+  } (${getLocation(this)!.short})`
+}
+
+function data<T extends any[]>(value: T) {
+  return { [READ]: new Final(value) }
+}
+
+class Final<T extends any[]> implements Reader<T, void, void> {
+  constructor(private value: T) {}
+  getValue(): T {
+    return this.value
+  }
+}
+
+export const str = createScalar `str` <string>()
+export const obj = createScalar `object` <object>()
+export const int = createScalar `int` <number>()
+export const float = createScalar `float` <number>()
+export const bool = createScalar `bool` <boolean>()
+export const func = createScalar `func`<AnyFunc>()
 
 export const __ref_testing__ = {
-  createScalarType
+  createScalar
 }
