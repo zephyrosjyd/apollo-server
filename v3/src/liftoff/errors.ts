@@ -40,9 +40,12 @@ export function throws<E extends ErrorWithStaticCode>(
         value: ErrorClass.code, writable: true
       })
 
-  return Object.assign(
+  const thrower = Object.assign(
     function(...args: ConstructorParameters<E>): never {
       throw new ErrorClass(...args)
-    }, { class: ErrorClass, code: ErrorClass.code }) as Thrower<E>
+    }, {
+      class: ErrorClass,
+      code: ErrorClass.code,
+    }) as Thrower<E>
+  return thrower
 }
-

@@ -1,1 +1,1 @@
-export {TypeCheck, checkString} from './typechecks'
+export * from './typechecks'

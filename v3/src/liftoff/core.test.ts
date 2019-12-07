@@ -36,8 +36,8 @@ const SERVICE_NAME = "Example Service";
 describe("the core", () => {
   const serviceName = str`Name of the service`();
   const maxConnections = int`Maximum connections`(MAX_CONNECTIONS_DEFAULT);
-  const preprocess = func<(input: string) => string>`Query preprocessor`();
-  const Schema = obj<{ typeDefs: string; resolvers: any }>`GraphQL Schema`();
+  const preprocess = func`Query preprocessor`<(input: string) => string>();
+  const Schema = obj`GraphQL Schema`<{ typeDefs: string; resolvers: any }>();
 
   const core = new Core(() => {
     def(Schema)(PRODUCT_SCHEMA);

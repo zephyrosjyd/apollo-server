@@ -15,7 +15,7 @@ type Ref<O extends (any[] | void), I extends (any[] | void) = O> =
 const KEY = Symbol('Memo key')
 const BASE = Symbol('Scalar base type')
 
-interface Scalar<T> extends Memoized<
+export interface Scalar<T> extends Memoized<
   Ref<[T], [T]> & {
     <X extends T>(): Scalar<X>
     [KEY]: Key
@@ -87,12 +87,8 @@ class Final<T extends any[]> implements Reader<T, void, void> {
 }
 
 export const str = createScalar `str` <string>()
-export const obj = createScalar `object` <object>()
+export const obj = createScalar `obj` <object>()
 export const int = createScalar `int` <number>()
 export const float = createScalar `float` <number>()
 export const bool = createScalar `bool` <boolean>()
 export const func = createScalar `func`<AnyFunc>()
-
-export const __ref_testing__ = {
-  createScalar
-}

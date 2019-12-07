@@ -1,30 +1,23 @@
-import { ScalarType, __ref_testing__ } from './ref'
-import { TypeCheck, checkString } from '../test-helpers'
+import { Scalar, str, int, /* float, bool, obj, func */ } from './ref'
+import { TypeCheck, checkString, checkInteger } from '../test-helpers'
 
-const { createScalarType } = __ref_testing__
-
-describe('createScalarType creates scalar ref types', () => {
-  const string = createScalarType<string> `string`
-
-  it('with a location', () =>
-    expect(getLocation(string)).toBeDefined())
-
-  testIsRefType(string, checkString)
+describe.only('scalar refs', () => {
+  testScalar(str, checkString)
+  testScalar(int, checkInteger)
 })
 
 import { getLocation } from './loc'
-import { trace, def } from './pattern'
 
-function testIsRefType<T>(ref: ScalarType<T>, check: TypeCheck<T>) {
-  describe(`${ref} creates Ref<${check.typeName}>`, () => {
+function testScalar<T>(scalar: Scalar<T>, check: TypeCheck<T>) {
+  describe.only(`${scalar} creates Ref<${check.typeName}>`, () => {
     it('the creator has a location', () =>
-      expect(getLocation(ref)).toBeDefined())
+      expect(getLocation(scalar)).toBeDefined())
 
     it('creates ref with a location', () =>
-      expect(getLocation(ref `a ref` ())).toBeDefined())
+      expect(getLocation(scalar `a ref` ())).toBeDefined())
 
-    it(`creates refs accepting ${check.typeName} values`, () => {
-      trace(() => def(ref `another ref` ()) (check.example))
+    it.each(Object.entries(check.examples))(`accepts %s (%s)`, (_, example) => {
+      scalar(example)
     })
   })
 }

@@ -1,5 +1,5 @@
 import { AnyFunc, isTemplateStringsArray } from '../utilities/types'
-import { setLocation, getLocation, Location } from './loc'
+import { setLocation } from './loc'
 
 export interface Memo {
   apply<F extends AnyFunc>(
