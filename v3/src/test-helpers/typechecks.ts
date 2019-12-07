@@ -16,7 +16,6 @@ export const checkString = (() => {
   return check
 })()
 
-
 export const checkInteger = (() => {
   const check: TypeCheck<number> = (o: any): o is number => typeof o === 'string'
   check.typeName = 'integer'
