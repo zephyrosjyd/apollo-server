@@ -3,7 +3,7 @@ import { setLocation, getLocation } from './loc'
 import { AnyFunc } from '../utilities/types'
 import { REPR, toString } from './repr'
 
-type Ref<O extends (any[] | void), I extends (any[] | void) = O> =
+export type Ref<O extends (any[] | void), I extends (any[] | void) = O> =
   I extends void
     ? Source<O>
     :
@@ -23,12 +23,12 @@ export interface Scalar<T> extends Memoized<
   }
 > {}
 
-interface Sink<I extends any[]> {
+export interface Sink<I extends any[]> {
   <X extends I>(...input:  X): Source<X>
   <X extends I>(source: Source<X>): Source<X>
 }
 
-interface Reader<T, S=any, D=any> {
+export interface Reader<T, S=any, D=any> {
   getValue(state: S): T
   initialState?:  S
   reduce?: (state: S, delta: D) => S
@@ -36,7 +36,7 @@ interface Reader<T, S=any, D=any> {
 }
 
 const READ = Symbol('Source<T>[READ]: Reader')
-interface Source<T> {
+export interface Source<T> {
   readonly [READ]: Reader<T>
 }
 export const isSource = <X>(o: any): o is Source<X> => !!o[READ]

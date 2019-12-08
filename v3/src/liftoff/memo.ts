@@ -24,55 +24,6 @@ export function getSite(): TemplateStringsArray {
   return memo.key[0]
 }
 
-function makeSite(parts: string[]): TemplateStringsArray {
-  ;(parts as any).raw = parts
-  return parts as any
-}
-
-export interface Store {
-  child(memo: Memo): Store
-  get(key: Key): Row | undefined
-  update<R extends RowUpdate<AnyFunc>>(update: R): Row<R extends RowUpdate<infer F> ? F : never> & R
-  delete(key?: Key): void
-  commit(): void
-}
-
-export interface PositionalSiteState {
-  sites: (TemplateStringsArray & string[])[]
-  nextIndex: number
-}
-
-export interface Row<F extends AnyFunc=AnyFunc> {
-  memo: Memo
-  key: Key
-  func: F
-  thisValue: ThisParameterType<F>
-  args: Parameters<F>
-  facade: Memoized<F>
-  result?: Result<F>
-}
-
-type RowUpdate<F extends AnyFunc = AnyFunc> =
-  Partial<Row<F>> & { memo: Memo, key: Key }
-
-type Result<F extends AnyFunc> = Returned<F> | Threw<F>
-
-interface Returned<F extends AnyFunc> {
-  type: 'returned'
-  value: ReturnType<F>
-}
-const Returned = <F extends AnyFunc>(value: ReturnType<F>) => ({
-  type: 'returned' as 'returned', value
-})
-
-interface Threw<F> {
-  type: 'threw'
-  error: Error
-}
-const Threw = <F>(error: Error): Threw<F> => ({
-  type: 'threw' as 'threw', error
-})
-
 function needsUpdate(a: Key, b: Key) {
   if (!a || !b) return true
   if (a.length !== b.length) return true
@@ -82,7 +33,73 @@ function needsUpdate(a: Key, b: Key) {
   return false
 }
 
-class Memo {
+function makeSite(parts: string[]): TemplateStringsArray {
+  ;(parts as any).raw = parts
+  return parts as any
+}
+
+export interface Store {
+  child(memo: Memo): Store
+  beginTransaction(): void
+  get<F extends AnyFunc>(key: Key): Row<F> | undefined
+  update<R extends RowUpdate<AnyFunc>>(update: R): Row<R extends RowUpdate<infer F> ? F : never> & R
+  delete(key?: Key): void
+  commitTransaction(): void
+}
+
+export interface Row<F extends AnyFunc=AnyFunc> {
+  memo: Memo
+  key: Key
+  func: F
+  thisValue: ThisParameterType<F>
+  args: Parameters<F>
+  facade: Memoized<F>
+  result: Result<F>
+}
+
+export type RowUpdate<F extends AnyFunc = AnyFunc> =
+  Partial<Row<F>> & { key: Key }
+
+export type Result<F extends AnyFunc> = Returned<F> | Threw<F>
+
+export interface Returned<F extends AnyFunc> {
+  type: 'returned'
+  value: ReturnType<F>
+}
+const Returned = <F extends AnyFunc>(value: ReturnType<F>) => ({
+  type: 'returned' as 'returned', value
+})
+
+export interface Threw<_F> {
+  type: 'threw'
+  error: Error
+}
+const Threw = <F>(error: Error): Threw<F> => ({
+  type: 'threw' as 'threw', error
+})
+
+interface PositionalSiteState {
+  sites: (TemplateStringsArray & string[])[]
+  nextIndex: number
+}
+
+export interface Memo {
+  readonly key: Key
+  update<F extends AnyFunc>(row: RowMaybeUnevaluated<F>): Row<F> & { result: Result<F> }
+  readonly hasChildren: boolean
+  readonly children: Map<TemplateStringsArray, Memo>
+}
+
+export type RowMaybeUnevaluated<F extends AnyFunc> =
+  Omit<Row<F>, 'result'> &
+  Partial<Pick<Row<F>, 'result'>>
+
+export interface Scope {
+  readonly key: Key
+  apply<F extends AnyFunc>(func: F, thisValue: ThisParameterType<F>, args: Parameters<F>, facade: Memoized<F>, key?: Key): ReturnType<F>
+}
+
+export class BaseMemo implements Memo, Scope {
   constructor(public readonly key: Key, parentStore: Store) {
     this.store = parentStore.child(this)
   }
@@ -90,8 +107,7 @@ class Memo {
   readonly store: Store
 
   hasChildren = false
-  @lazy
-  private get children(): Map<TemplateStringsArray, Memo> {
+  @lazy get children(): Map<TemplateStringsArray, BaseMemo> {
     this.hasChildren = true
     return new Map
   }
@@ -102,25 +118,12 @@ class Memo {
     return new Set
   }
 
-  child(key: Key): Memo {
-    const [site] = key
-    const child = this.children.get(site)
-    if (child) {
-      this.activeChildren.add(child)
-      return child
-    }
-    const created: Memo = new (this.constructor as any)(key, this.store)
-    this.children.set(site, created)
-    this.activeChildren.add(created)
-    return created
-  }
-
   apply<F extends AnyFunc>(func: F, thisValue: ThisParameterType<F>, args: Parameters<F>, facade: Memoized<F>, key?: Key): ReturnType<F> {
     const {store} = this
     const childKey = key || this.positionalKey(facade, thisValue, ...args)
-    const row = store.get(childKey) as Row<F> || {
+    const row: RowMaybeUnevaluated<F> = store.get(childKey) || {
       key: childKey,
-      parentMemo: this,
+      memo: this,
       func,
       thisValue,
       args,
@@ -135,44 +138,39 @@ class Memo {
     throw result.error
   }
 
-  update<F extends AnyFunc>(row: Row<F>): Row<F> & { result: Result<F> } {
+  update<F extends AnyFunc>(row: RowMaybeUnevaluated<F>): Row<F> & { result: Result<F> } {
     const {store} = this
     const {key, func, thisValue, args} = row
     const prevMemo = memo
+    const child = this.child(key)
     try {
-      memo = this.child(key)
+      memo = child
+      child.beginUpdate()
       const value = func.apply(thisValue, args)
       return store.update({
         key,
-        memo,
         result: Returned<F>(value),
       })
     } catch(error) {
       return store.update({
         key,
-        memo,
+        memo: child,
         result: Threw<F>(error)
       })
     } finally {
-      memo.finished()
+      child.commitUpdate()
       memo = prevMemo
     }
   }
 
-  finished() {
-    this.hasChildren && this.destroyInactiveChildren()
-    this.hasPositionalSites && this.resetPositionalIndexes()
-    this.store.commit()
+  beginUpdate() {
+    this.store.beginTransaction()
   }
 
-  destroyInactiveChildren() {
-    const {children, activeChildren} = this
-    for (const [site, child] of children.entries()) {
-      if (!activeChildren.has(child)) {
-        child.destroy()
-        children.delete(site)
-      }
-    }
+  commitUpdate() {
+    this.hasChildren && this.destroyInactiveChildren()
+    this.hasPositionalSites && this.resetPositionalIndexes()
+    this.store.commitTransaction()
   }
 
   destroy() {
@@ -184,14 +182,36 @@ class Memo {
     this.store.delete()
   }
 
+  private child(key: Key): BaseMemo {
+    const [site] = key
+    const child = this.children.get(site)
+    if (child) {
+      this.activeChildren.add(child)
+      return child
+    }
+    const created: BaseMemo = new (this.constructor as any)(key, this.store)
+    this.children.set(site, created)
+    this.activeChildren.add(created)
+    return created
+  }
+
+  private destroyInactiveChildren() {
+    const {children, activeChildren} = this
+    for (const [site, child] of children.entries()) {
+      if (!activeChildren.has(child)) {
+        child.destroy()
+        children.delete(site)
+      }
+    }
+  }
+
   private hasPositionalSites = false
-  @lazy
-  private get positionalSites(): Map<AnyFunc, PositionalSiteState> {
+  @lazy private get positionalSites(): Map<AnyFunc, PositionalSiteState> {
     this.hasPositionalSites = true
     return new Map
   }
 
-  positionalKey<F extends AnyFunc>(func: F, ...deps: any[]): Key {
+  private positionalKey<F extends AnyFunc>(func: F, ...deps: any[]): Key {
     const {positionalSites} = this
     let keyStateForFunc = positionalSites.get(func)!
     if (!keyStateForFunc) {
@@ -208,7 +228,7 @@ class Memo {
     }
   }
 
-  formatSite(site: string[], func: AnyFunc, index: number, length: number): void {
+  private formatSite(site: string[], func: AnyFunc, index: number, length: number): void {
     site.length = 0
     const name = func.name || 'anonymous'
     site.push(
@@ -240,4 +260,4 @@ function lazy(target: any, propertyKey: string, descriptor: PropertyDescriptor) 
   }
 }
 
-let memo: Memo // TODO: initialize
+let memo: Scope // TODO: initialize
