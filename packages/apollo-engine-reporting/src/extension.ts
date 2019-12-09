@@ -32,7 +32,6 @@ export class EngineReportingExtension<TContext = any>
   implements GraphQLExtension<TContext> {
   private treeBuilder: EngineReportingTreeBuilder;
   private explicitOperationName?: string | null;
-  private gqlParsingSucceeded?: boolean;
   private gqlValidationSucceeded?: boolean;
   private queryString?: string;
   private documentAST?: DocumentNode;
@@ -55,11 +54,6 @@ export class EngineReportingExtension<TContext = any>
     this.treeBuilder = new EngineReportingTreeBuilder({
       rewriteError: options.rewriteError,
     });
-  }
-
-  // If GraphQL validation has started, then GraphQL parsing must have succeeded
-  public validationDidStart(): ((...errors: Error[]) => void) | void {
-    this.gqlParsingSucceeded = true;
   }
 
   public requestDidStart(o: {
@@ -167,11 +161,9 @@ export class EngineReportingExtension<TContext = any>
       // Specifically, successful parsing should always be accompanied by
       // a requestContext.document and successful validation should always be
       // accompanied by a requestContext.operation.
-      const gqlParseFailure = !this.gqlParsingSucceeded;
       const gqlValidationFailure = !this.gqlValidationSucceeded;
 
       this.addTrace({
-        gqlParseFailure,
         gqlValidationFailure,
         operationName,
         queryHash,
