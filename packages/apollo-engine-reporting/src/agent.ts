@@ -15,6 +15,7 @@ import { EngineReportingExtension } from './extension';
 import { GraphQLRequestContext } from 'apollo-server-types';
 import { InMemoryLRUCache } from 'apollo-server-caching';
 import { defaultEngineReportingSignature } from 'apollo-graphql';
+import { Worker } from 'worker_threads';
 
 export interface ClientInfo {
   clientName?: string;
@@ -35,10 +36,10 @@ type VariableValueTransformOptions = {
 
 export type VariableValueOptions =
   | {
-      transform: (
-        options: VariableValueTransformOptions,
-      ) => Record<string, any>;
-    }
+    transform: (
+      options: VariableValueTransformOptions,
+    ) => Record<string, any>;
+  }
   | SendValuesBaseOptions;
 
 export type GenerateClientInfo<TContext> = (
@@ -224,6 +225,19 @@ export class EngineReportingAgent<TContext = any> {
 
   private signalHandlers = new Map<NodeJS.Signals, NodeJS.SignalsListener>();
 
+  private worker = new Worker(`
+  const { parentPort } = require('worker_threads');
+  const { Trace } = require('apollo-engine-reporting-protobuf');
+  if (parentPort) {
+    parentPort.on('message', (trace) => {
+      console.log("received trace");
+      parentPort.postMessage(Trace.encode(trace).finish());
+    });
+  }
+  `,
+    { eval: true }
+  );
+
   public constructor(options: EngineReportingOptions<TContext> = {}) {
     this.options = options;
     this.apiKey = options.apiKey || process.env.ENGINE_API_KEY || '';
@@ -302,7 +316,14 @@ export class EngineReportingAgent<TContext = any> {
     if (protobufError) {
       throw new Error(`Error encoding trace: ${protobufError}`);
     }
-    const encodedTrace = Trace.encode(trace).finish();
+
+    const encodedTrace = await new Promise<Uint8Array>((resolve, reject) => {
+      this.worker.postMessage(trace);
+      this.worker.on('message', resolve);
+      this.worker.on('error', reject);
+    });
+    // const encodedTrace = Trace.encode(trace).finish();
+    console.log(encodedTrace.length);
 
     const signature = await this.getTraceSignature({
       queryHash,
@@ -328,7 +349,7 @@ export class EngineReportingAgent<TContext = any> {
     if (
       this.sendReportsImmediately ||
       this.reportSizes[schemaHash] >=
-        (this.options.maxUncompressedReportSize || 4 * 1024 * 1024)
+      (this.options.maxUncompressedReportSize || 4 * 1024 * 1024)
     ) {
       await this.sendReportAndReportErrors(schemaHash);
     }
@@ -403,7 +424,7 @@ export class EngineReportingAgent<TContext = any> {
         if (curResponse.status >= 500 && curResponse.status < 600) {
           throw new Error(
             `HTTP status ${curResponse.status}, ${(await curResponse.text()) ||
-              '(no body)'}`,
+            '(no body)'}`,
           );
         } else {
           return curResponse;
@@ -425,7 +446,7 @@ export class EngineReportingAgent<TContext = any> {
       // redirects.
       throw new Error(
         `Error sending report to Apollo Engine servers: HTTP status ${
-          response.status
+        response.status
         }, ${(await response.text()) || '(no body)'}`,
       );
     }
@@ -625,9 +646,9 @@ function makeSendValuesBaseOptionsFromLegacy(
 ): SendValuesBaseOptions {
   return Array.isArray(legacyPrivateOption)
     ? {
-        exceptNames: legacyPrivateOption,
-      }
+      exceptNames: legacyPrivateOption,
+    }
     : legacyPrivateOption
-    ? { none: true }
-    : { all: true };
+      ? { none: true }
+      : { all: true };
 }
