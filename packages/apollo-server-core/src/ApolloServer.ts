@@ -133,7 +133,7 @@ export class ApolloServerBase {
   public requestOptions: Partial<GraphQLServerOptions<any>> = Object.create(null);
 
   private context?: Context | ContextFunction;
-  private engineReportingAgent?: import('apollo-engine-reporting').EngineReportingAgent;
+  private engineReportingAgent?: import('apollo-engine-reporting').EngineReportingAgentBroker;
   private engineServiceId?: string;
   private engineApiKeyHash?: string;
   protected plugins: ApolloServerPlugin[] = [];
@@ -310,8 +310,8 @@ export class ApolloServerBase {
     }
 
     if (this.engineServiceId) {
-      const { EngineReportingAgent } = require('apollo-engine-reporting');
-      this.engineReportingAgent = new EngineReportingAgent(
+      const { EngineReportingAgentBroker } = require('apollo-engine-reporting');
+      this.engineReportingAgent = new EngineReportingAgentBroker(
         typeof engine === 'object' ? engine : Object.create(null),
       );
       // Don't add the extension here (we want to add it later in generateSchemaDerivedData).
