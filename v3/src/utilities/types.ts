@@ -1,6 +1,8 @@
 export type AnyFunc = (this: any, ...args: any[]) => any
 
-export type ValueType = string | number | bigint | boolean | symbol | null | undefined
+export type DataValueType = string | number | bigint | boolean | symbol
+export type EmptyValueType = null | undefined
+export type ValueType = DataValueType | EmptyValueType
 
 export type ValueTypeOf<T> =
   T extends string

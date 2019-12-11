@@ -1,4 +1,5 @@
 import { AnyFunc, isTemplateStringsArray } from '../utilities/types'
+import { lazy } from '../utilities/decorators'
 import { setLocation } from './loc'
 
 export type Memoized<F extends AnyFunc> = ((...key: Key) => F) & F
@@ -56,6 +57,7 @@ export interface Row<F extends AnyFunc=AnyFunc> {
   facade: Memoized<F>
   result: Result<F>
 }
+
 
 export type RowUpdate<F extends AnyFunc = AnyFunc> =
   Partial<Row<F>> & { key: Key }
@@ -248,15 +250,6 @@ export class BaseMemo implements Memo, Scope {
       state.sites.length = state.nextIndex
       state.nextIndex = 0
     }
-  }
-}
-
-function lazy(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
-  const get = descriptor.get
-  descriptor.get = function lazyGet() {
-    const value = get?.apply(target)
-    Object.defineProperty(target, propertyKey, { value })
-    return value
   }
 }
 

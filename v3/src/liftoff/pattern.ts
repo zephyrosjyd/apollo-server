@@ -1,89 +1,128 @@
-import { Ref } from './ref'
-import { Key, Site, Keyed, keyed } from './key'
-import { throws } from './errors'
+import { lazy } from "src/utilities/decorators"
+import { ReferenceType } from "src/utilities/types"
 
-export interface Bond<R=any> {
-  type: string
-  key: Key
-  state: any
-  rval: R
+/**
+ * A Pattern holds an indexable tree of rows `<R>`. Rows can be any object.
+ *
+ * Patterns identify rows with a primary key `<K>`. The primary key is some
+ * part of `R` which uniquely identifies the row within a pattern.
+ *
+ * Patterns also have a positional key part `<P>` which like primary keys
+ * are some part of `R`. Unlike primary keys, they do not have to uniquely
+ * identify rows alone. Instead, they can be used in conjunction with their
+ * position within the pattern to identify a row.
+ *
+ * @param R row type
+ * @param K key type (default: `R`)
+ */
+interface Pattern<
+  R extends object = object,
+  K extends Partial<R> = R,
+  P extends Partial<R> = K> {
+  sweep(): Sweep<R, K, P>
 }
 
-export interface PatternDelta {
-  mut: 'add' | 'remove' | 'change'
-  bond: Bond
+
+const ID = Symbol('Key id: number')
+type Id = { [ID]: number }
+
+const ids: WeakMap<ReferenceType, Id> = new WeakMap
+let nextId = 0
+function idFor(o: ReferenceType) {
+  const existing = ids.get(o)
+  if (existing) return existing
+  const id = Object.freeze({ [ID]: nextId++ })
+  ids.set(o, id)
+  return id
 }
 
-export type Pattern = Map<Site, Bond>
+/**
+ * Sweeps modify Patterns. During a Sweep, we walk (some subset of) the tree,
+ * touching (some subset of) rows. Any untouched row is removed after the
+ * sweep.
+ */
+interface Sweep<
+  R extends object = object,
+  K extends Partial<R> = R,
+  P extends Partial<R> = K> {
+  seek(key: K | P): R | undefined
+  update(row: UpdateOf<Pattern<R, K, P>>): Sweep<P>
 
-const E_UNBOUND = throws('UNBOUND', 'No pattern is currently bound')
-
-interface Scope {
-  current: Pattern
-  delta: PatternDelta[]
-  removed: Set<Site>
+  /**
+   * Finish the sweep, applying changes.
+   */
+  commit(): void
 }
 
-let scope: Scope | void = void 0
 
-interface KeyDelta {
-  mut: 'add' | 'keep' | 'change'
-  bond?: Bond
-}
+abstract class Pattern<
+  R extends object = object,
+  K extends Partial<R> = R,
+  P extends Partial<R> = K> {
 
-export function keyState(key: Key): KeyDelta {
-  if (!scope) throw E_UNBOUND()
-  const bond = scope.current.get(key.site)
-  if (!bond) return { mut: 'add', bond }
-  if (key.equals(bond.key)) return { mut: 'keep', bond }
-  return { mut: 'change', bond }
-}
+  abstract identify(key: K | P): Id
+  abstract getRow(id: Id): R | undefined
+  abstract getChild(id: Id): Pattern<R, K, P> | undefined
 
-export function trace(plan: () => any, pattern: Pattern = new Map): PatternDelta[] {
-  const prevScope = scope
-  try {
-    scope = {
-      current: pattern,
-      delta: [],
-      removed: new Set(pattern.keys())
-    }
-    plan()
-    for (const site of scope.removed) {
-      scope.delta.push({ mut: 'remove', bond: pattern.get(site)! })
-    }
-    return scope.delta
-  } finally {
-    scope = prevScope
+  hasChildren = false
+  @lazy get children(): Map<object, Pattern<R, K, P>> {
+    this.hasChildren = true
+    return new Map
+  }
+
+  sweep(): Sweep<R, K, P> {
+    return new Sweep(this)
   }
 }
 
-type Linkable<S, R> = (bond: (type: string, state: S, rval?: R) => R, state?: S) => any
-export const linked = <L extends Linkable<any, any>>(linkable: L): Keyed<(key?: Key) => ReturnType<L>> => keyed(
-  (key: Key) => {
-    const stateForKey = keyState(key)
-    const bond =
-      stateForKey.mut === 'keep'
-        ? <R>(_type: string, _state: any, _rval: R): R => {
-          if (!scope) throw E_UNBOUND()
-          scope.removed.delete(key.site)
-          return stateForKey.bond?.rval
-        }
-        : <R>(type: string, state: any, rval: R): R => {
-            if (!scope) throw E_UNBOUND()
-            scope.delta.push({
-              mut: stateForKey.mut as 'add' | 'change',
-              bond: { type, key, state, rval }
-            })
-            return rval
-          }
-    return linkable(bond, stateForKey.bond?.state)
+type UpdateOf<P extends Pattern> =
+  P extends Pattern<infer R, infer K, infer P>
+    ? (K | P) & Partial<R>
+    : never
+
+interface Transaction<P extends Pattern> {
+  update(id: Id, update: UpdateOf<P>): void
+}
+
+class Sweep<
+  R extends object = object,
+  K extends Partial<R> = R,
+  P extends Partial<R> = K> {
+  constructor(
+    readonly pattern: Pattern<R, K, P>,
+    readonly transaction: Transaction<Pattern<R, K, P>>,
+    readonly parent?: Sweep<P>) {}
+
+  hasActiveRows = false
+  @lazy get activeRows(): Set<object> {
+    this.hasActiveRows = true
+    return new Set
   }
-)
 
-type DefState = { ref: Ref<any>, def: any }
+  hasAddedRows = false
+  @lazy get addedRows(): Set<object> {
+    this.hasActiveRows = true
+    return new Set
+  }
 
-export const def = linked(
-  (bond: <R>(type: string, state: DefState, rval: R) => R) =>
-    <T>(ref: Ref<T>) => (def: T | Ref<T>): T | Ref<T> =>
-      bond('def', { ref, def }, def)
-)
+  hasDelta = false
+  @lazy get delta(): Delta<Pattern<R, K, P>>[] { return [] }
+
+  get(key: K | P): R | undefined {
+    const {pattern} = this
+    const id = pattern.identify(key)
+    this.activeRows.add(id)
+    const existing = pattern.getRow(id)
+    return existing
+  }
+
+  update(row: UpdateOf<Pattern<R, K, P>>): Sweep<R, K, P> {
+    const {pattern} = this
+    const id = this.pattern.identify(row)
+    this.activeRows.add(id)
+    this.transaction.update(id, row)
+    const child = this.pattern.getChild(id)
+
+  }
+
+}
