@@ -1,119 +1,795 @@
 # Liftoff
 
+For your consideration: Liftoff, a translucent reactive framework.
+
+*Translucent* as in you can still see your code inside it. Liftoff introduces some new concepts and a few new restrictions, but by and large lets you write comfortable, synchronous JS/TS that is reactive nevertheless.
+
+_<div style='text-align: center'>Liftoff is a bit like React for your server</div>_
+
+You know how React turns your world into components and can show you state of the whole tree? Liftoff does that.
+
+You know how components can fail or suspend and the rest of the system keeps on trucking? Liftoff does that.
+
+On the other hand, you know how with React, it's tricky to pass data between distant components? Liftoff doesn't do that.
+
+_<div style='text-align: center'>Liftoff is a bit like Redux for your whole program.</div>_
+
+By which I mean the *good parts* of Redux: time travel, error recovery, a clear timeline.
+
+_<div style='text-align: center'>Liftoff is a bit like a spreadsheet.</div>_
+
+If you hate spreadsheets you should probably forget you read that sentence. In fact, just skip this whole paragraph. But everyone else: you know how in a spreadsheet, you can change a single box and the change flows through the whole sheet? Liftoff does that in JS.
+
+In Liftoff, we can retry functions after they fail. We can synchronously read the value of promises. Functions can return multiple times, their results flowing around the system.
+
+🧠To learn how Liftoff works, jump to [from the ground up](#From-the-ground-up).
+
+👁To see what you can do with it, continue to [from above](#From-above).
+
 ## From above
 
-### 1. configuring a server
+### code as configuration
+
+You configure the system with code.
 
 ```typescript
-import {ambient, todo} from './directives'
+import { Apollo, Server, Schema, Resolvers } from '@apollo/core'
+import { Billing } from '@hypothetical/plugins'
+import { ambient, todo } from './directives'
+import typeDefs from './schema.gql'
+import resolvers from './schema.resolver'
 
 Apollo(() => {
-  Schema({
-    typeDefs: require('./schema.gql'),
-    resolvers: require('./schema'),
-  })
-
-  Directives({ ambient, todo })
+  Server()
+  Schema(typeDefs, { ambient, todo })
+  Resolvers(resolvers)
+  Billing()
 })
 ```
 
-### 2. schema modules
+The order of these calls doesn't matter.
 
-```typescript=
-// schema-modules/admin.ts
+### composable configuration
 
-import {Schema} from 'apollo-server'
-import {ambient} from './directives'
-import typeDefs from './admin.gql'
-import resolvers from './admin.resolver'
+Because you configure with code, you might assume you can do things like this:
 
-export default () => {
-  Schema({
-    typeDefs, resolvers
-  })
-  Directives({ambient})
+```typescript
+import { Apollo, Server, Schema, Resolvers }
+  from '@apollo/core'
+import { Billing } from '@hypothetical/plugins'
+import { DevTools } from '@hypothetical/plugins'
+import { ambient, todo } from './directives'
+import typeDefs from './schema.gql'
+import resolvers from './schema.resolver'
+
+function Base() {
+  Server()
+  Billing()
+}
+
+Apollo(() => {
+  Base()
+  Schema(typeDefs, { ambient, todo })
+  Resolvers(resolvers)
+
+  if (process.env.NODE_ENV === 'development') {
+    DevTools()
+  }
+})
+```
+
+You would be correct.
+
+### refs — referring to configurable data
+
+We can use `ref`s to define data that we want someone else to provide.
+
+A toy example:
+
+#### providing toys
+
+```typescript
+/******** main.ts ********/
+
+import { Apollo } from '@apollo/core'
+import { Toy, ToyPlugin } from './toy.ts'
+
+Apollo(() => {
+  // We can provide Toys from anywhere, before or after their
+  // consumer is defined.
+  Toy('talula')
+  StoryToys()
+  ToyPlugin()  // 👈🏽 consumer will be defined in here (below)
+  Toy('mr. winkles')
+})
+
+function StoryToys() {
+  Toy('woody')
+  Toy('mr. potatohead')
+  Toy('little bo peep')
 }
 ```
 
-Other modules are similar.
+#### defining and consuming toys
 
-```typescript=
-// main.ts
+```typescript
+/******** toy.ts ********/
 
-import {ambient, todo} from './directives'
-import {Directives} from 'apollo-server'
-import User from './schema-modules/user'
-import Documents from './schema-modules/documents'
-import Admin from './schema-modules/admin'
+import { ref } from '@apollo/core'
 
-Apollo(() => {
-  Admin()
-  User()
-  Documents()
-  Directives({ todo })
+// You generally write refs at the top level and export them
+export const Toy =
+  // type 👇🏽    description 👇🏽
+  ref <string> `The name of a toy` () // 👈🏽 default value (optional, empty here)
+
+export ToyPlugin(() => {
+  // We can iterate over all Toys like so:
+  for (const toy of Toy) {
+    // play with each toy
+  }
+
+  // Want an array?
+  const toys: string[] = [...Toy]
+
+  // (TS will infer the type of toys. I'm writing it out for demonstration
+  // purposes.)
+
+  // So now:
+  //   toys = ['talula',
+  //           'mr. winkles',
+  //           'woody',
+  //           'mr. potatohead',
+  //           'little bo peep']
+  // And we can play with them.
 })
 ```
 
-### 3. merging schema modules
+### `read()`ing refs
 
-How does the server pull together all those `Schema` and `Directives` calls into an executable schema? Like this:
+You can `read` the value of a ref:
 
 ```typescript
-const ExecutableSchema = ref(() => {
-  const merged = all(Schema)
-    [reduce](mergeSchemas)
-    [value]
+export const Planet = ref <string> `name of a planet` ()
 
-  const schemaDirectives = all(Directives)
-    [reduce]((all, these) => ({ ...all, ... these }))
-    [value]
+Apollo(() => {
+  Planet('Earth')
+  const planet = read(Planet)
 
-  return makeExecutableSchema({
-    ...merged,
+  // `go` declares an an effect
+  // it reboots when its dependencies change
+  // like React, we do a shallow identity comparison of the
+  // deps.
+  //   this is 👇🏽 the dependency
+  go `print "${planet}"` (() => {
+    console.log(planet)
+  })
+})
+```
+
+That prints "Earth". But what does this do?
+
+```typescript
+export const Planet = ref <string> `name of a planet` ()
+
+Apollo(() => {
+  Planet('Mercury')
+  Planet('Venus')
+  Planet('Earth')
+  Planet('Mars')
+
+  const planet = read(Planet)
+  go `print "${planet}"` (() => {
+    console.log(planet)
+  })
+})
+```
+
+`Planet` is a `ref<string>`, so `read` will return a string.
+
+But there are multiple `Planet`s. So `read` returns multiple times.
+
+Liftoff _blooms_ the caller. It re-evaluates once for each defined value of `Planet`.
+
+### implementing schema modules
+
+We now know enough to understand how the server collects all those `Schema` and
+`Resolvers` calls into an executable schema:
+
+```typescript
+import {ref, single, reduce, condense, value}
+  from 'apollo-server'
+
+// You can specify refs as functions.
+//
+// Doing so lets you format arguments into objects. Compare: Redux action
+// creators.
+//
+// The ref takes on the function's return value. So this is
+// a Ref<{ typeDefs: string, directives: IDirectives }>
+export const Schema = ref `GraphQL Schema Definition` (
+  (typeDefs: string, directives: IDirectives) => ({
+    typeDefs, directives
+  }))
+
+// A less fancy ref.
+export const Resolvers = ref<IResolvers>()
+
+export const ExecutableSchema = ref `Executable GraphQL Schema` (() => {
+  const typeDefs = read(
+    Schema.typeDefs[reduce](mergeSchemas)
+  )
+
+  const schemaDirectives = read(
+    Schema.directives[condense]
+      // [condense] merges all rows together. It's equivalent to:
+      //   [reduce]((all, these) => ({ ...all, ... these }))
+  )
+
+  const resolvers = read(Resolvers[condense])
+
+  return createAndValidateExecutableSchema({
+    typeDefs,
+    resolvers,
     schemaDirectives
   })
 })
 ```
 
-### 4. dynamic config updates
+## sources — representing changing values
+
+Sources emit values.
+
+### a ticker
 
 ```typescript
-import {go, read, source} from 'apollo-server'
+import {go, source} from '@apollo/core'
+
+const seconds = source <number> `seconds elapsed, very approximate` (emit => {
+  // go defines an effect.
+  go(() => {
+    let count = 0
+    const interval = setInterval(() => emit(count++), 1000)
+
+    // Like React's useEffect, go effects return dispose functions
+    return () => clearInterval(interval)
+  })
+})
+```
+
+To read a source, we can put it in a box:
+
+```typescript
+export default `Count schema` (() => {
+  Schema(`
+    extend Query {
+      motd: String
+    }
+  `)
+  const sec: Cell<number> = box(seconds)
+  Resolvers({
+    Query: {
+      seconds() {
+        return sec.value
+      }
+    }
+  })
+})
+```
+
+`sec` is a box holding the current value of seconds. Think of a cell in a spreadsheet. A box is a stable object that holds a changing value.  Whenever seconds emits (about once per second) we scribble out the old value and put a new one in the box.
+
+Cells help us pass source values into closures. If we did this:
+
+```typescript
+  // Probably don't do this:
+  const secondsNum: number = read(seconds)
+  Resolvers({
+    Query: {
+      seconds() {
+        return sec
+      }
+    }
+  })
+})
+```
+
+It would work. Every time `seconds` emitted a new value, `read(seconds)` would return, we'd re-evaluate the caller. This would dispose of the previous `Resolvers` and create new ones that close over the new `secondsNum`.
+
+It's all a bit much. To avoid the re-evaluation, we put the source in a box. When you `box` a source, you always get the same object back. Since the box itself never changes identity, the `seconds` resolver can safely close over it, fetching its `.value` anew with each request.
+
+A less contrived example: a message of the day.
+
+### message of the day
+
+```typescript
+import {box, ref} from '@apollo/core'
+import {pollJson} from './poll'
+
+const motdUrl = ref <string> `Message of the day URL` ()
+
+export default (() => {
+  const motd = box(() => pollJson(read(motdUrl), 1000 * 60 * 60 * 12))
+
+  // box.value will be changing under us. But the box stays stable, so we
+  // don't re-evaluate when the value changes. That's okay—we don't have to!
+  Schema(`
+    extend Query {
+      motd: String
+    }
+  `)
+  Resolvers({
+    Query: {
+      motd() {
+        return motd.value
+      }
+    }
+  })
+})
+```
+
+### dynamic config polled from a url
+
+Let's poll configuration from a URL.
+
+Define the poller:
+
+```typescript
+/******** poll.ts ********/
+
+import {source, go} from 'apollo-server'
+
+export const pollJson = <T extends object>(url: string, ms: number = 1000) =>
+  // A source takes a function that receives an emit function and
+  // calls it to emit some values.
+  source<T>((emit, fail) => ({
+    // `go` declares an an effect
+    // it reboots when its dependencies change
+    // like React, we do a shallow identity comparison of the
+    // deps.
+    //   these 👇🏽          👇🏽 are its dependencies
+    go `poll ${url} every ${ms}ms` (() => {
+      const iv = setInterval(async () => {
+        try {
+          emit(await getJson<T>(url))
+        } catch(err) {
+          fail(err)
+        }
+      }, ms)
+      return () => clearInterval(iv)
+    })
+  })
+```
+
+Use it to configure a schema:
+
+```typescript
+/******** gateway.ts ********/
+
+import {read, map, filter, condense, many} from '@apollo/core'
+import {pollJson} from './poll'
 import * as supported from './directives'
 
-const poll = remember((url: Source<string>, ms: Source<number> = 1000) => {
-  const [source, sink] = pipe<any>()
-  // go declares an an effect
-  // it reboots when its dependencies change.
-  //   these    👇🏽          👇🏽 are its dependencies
-  go `polling ${url} every ${ms}ms` (() => {
-    const iv = setInterval(async () => sink(await getJson(url)), ms)
-    return () => clearInterval(iv)
-  })
-  return source
-})
+interface IConfig {
+  typeDefs: string,
+  enabledDirectives: string[]
+}
 
-function GatewayConfig() {
-  // read(source) blocks until source emits a value, then re-returns with
-  // every subsequent value.
-  const config = read(poll(GATEWAY_CONFIG_URL))
-  Schema(config.schema)
-  Many(config.enabledDirectives)
-    (
-      enabled =>
-        enabled in supported
-          ? { [enabled]: supported[enabled] }
-          : undefined
-    )
-    [condensed]
+export const GatewayConfigUrl = ref <string> ()
+
+export default ((resolvers: IResolvers) => {
+  // Suspend until someone provides a GatewayConfigUrl, then start polling it.
+  const configSource = pollJson<IConfig>(read(GatewayConfigUrl))
+
+  // `read.deep` differs from `read` in that it performs a deep
+  // comparison of the object whenever the source emits and avoids emitting
+  // if the object hasn't changed.
+  const newConfig = read.deep(configSource)
+
+  // Let's suppose that in addition to the schema, config provides
+  // an array of enabled directives. How would we enable those?
+  const directives = read(
+    // many.unique<R>(iterable: R) creates a Many<R> holding the unique
+    // values yielded by the iterable.
+    //
+    // We could do this with array methods, but working with a Many means
+    // that when we get a new config, we only have to process the change,
+    // rather than having to re-process all the directives.
+    many.from(config.enabledDirectives)
+      [where](enabled => enabled in supported)
+      [map](enabled => ({ [enabled]: supported[enabled] }))
+      [condense]
+  )
+
+  // Finally, declare the schema.
+  Schema(config.typeDefs, directives)
+})
+```
+
+## part — isolating failure and suspense
+
+Whenever we try to `read` something, we might end up failing or suspending.
+
+Currently, that means the whole system fails or suspends, which is not great!
+
+Breaking the system into `part`s gives us isolation:
+
+```typescript
+import {read, ref} from '@apollo/core'
+import {pollJson} from './poll'
+
+const motdUrl = ref <string> `Message of the day URL` ()
+
+export default part `Message of the day schema` (() => {
+  // If either of these reads fail, the Message of the day schema doesn't
+  // come up, but everything else is ok!
+  const motd = read(pollJson(read(motdUrl), 1000 * 60 * 60 * 12))
+  Schema(`
+    extend Query {
+      motd: String
+    }
+  `)
+  Resolvers({
+    Query: { motd() { return motd } }
+  })
+})
+```
+
+### injecting behavior
+
+You can inject behavior the same way you inject anything else: by making a ref
+for it. "It" in this case will be a function.
+
+#### consuming functions
+
+```typescript
+/******** songs.resolvers.ts ********/
+import {read, Many} from '@apollo/core'
+import {Song} from '@spotify/client'
+
+// You can have refs to functions too!
+// This one returns your favorite songs.
+export const getFavorites = ref<(uid: string, count: number) => Many<Song>>()
+
+// We can put whole features into boxes.
+// Boxes provide isolation: if the contents fail to evaluate, the box goes into
+// a failing state (box.error becomes defined), but other parts of the system
+// keep going.
+export default box(() => {
+  Schema(`
+    extend type User {
+      favorites: Song[]
+    }
+  `)
+
+  // `read.the` ensures that we just get one value out of a ref.
+  // If it's been defined multiple times, we fail until it's defined just
+  // once.
+  //
+  // getFavories never really changes, so blocking here should be fine.
+  const faves = read.the(getFavorites)
+
+  Resolvers({
+    User: {
+      favorites(user: {spotifyId: string, count: number = 100}) {
+        return faves(user.spotifyId, count)
+      }
+    }
+  })
+})
+```
+
+#### providing functions
+
+```typescript
+/******** spotify.ts ********/
+import {read,many} from '@apollo/core'
+import {getFavorites} from './songs.resolvers'
+import SpotifyClient, {Song} from '@spotify/client'
+
+export const spotifyApiKey = ref<string> `spotify api key` ()
+
+export default (() => {
+  // Resources take an acquire function, which returns the resource, and a
+  // release function, which takes the resource and disposes of it.
+  const client = resource(
+    () => new SpotifyClient(read(spotifyApiKey)),
+    client => client.close()
+  )
+  getFavorites((uid: string, count: number) =>
+    // Get many favorites.
+    // This Many will resolve asynchronously, but we can treat it like any
+    // other.
+    //      we can specify a field to use as a unique id 👇🏽
+    many.from(client.getFavorites(uid, {limit: count}), 'id')
+  )
+})
+```
+
+### scoping data
+
+Boxes also let you scope values.
+
+Let's associate the http request with the graphql request:
+
+```typescript
+import * from '@apollo/metrics'
+
+// Scoped lets us associate plans with an object, i.e. the request.
+import { box } from '@apollo/core'
+
+import { Execute } from '@apollo/server'
+import { parseHttpRequest, sendResponse, sendError } from './httpTransport'
+
+export const http = ref `HTTP Request/Response` (
+  (req: IncomingMessage, res: ServerResponse) => ({ request, response })
+)
+
+export default box <HttpHandler> (() =>
+  const execute = read.the(Execute)
+  const request = box(http)
+  return (req, res) => {
+    const gqlRequest = parseHttpRequest(req)
+    // Put a scoped value in the box
+    request.for(gqlRequest) (req, res)
+    return execute(gqlRequest)
+      .then(sendResponse, sendError)
+  }
+})
+```
+
+Using it:
+
+```typescript
+import {box} from '@apollo/core'
+import {ResolveArg} from '@apollo/server'
+import {http} from './httpHandler.ts'
+import {readAmbientArg} from './httpTransport.ts'
+
+export default box `@ambient directive` ((name = 'ambient') => {
+  const request = box(http)
+  mid(ResolveArg[where](arg => arg.directives.has(name))) (
+    _next => (gqlRequest, field) =>
+      readAmbientArg(gqlRequest, field, request.for(gqlRequest).value)
+  )
+})
+```
+
+### 6. metrics
+
+Declaring and updating some metrics:
+
+```typescript
+import * from '@apollo/metrics'
+
+import { scope, mid } from '@apollo/core'
+
+// By convention, middleware chains are prefixed with 'mid'
+import { Execute } from '@apollo/server'
+
+// request is a meter provided by @apollo/metrics.
+// By default, it provides three pipes: `start`,
+// `stop.ok` and `stop.fail`
+export const RequestMeter = request `GraphQL Request` <GraphQLRequest> ()
+
+export default RequestMetrics() {
+  const meters = box(RequestMeter)
+  mid(Execute) ((exec) => {
+    return async gqlRequest => {
+      const meter = meters.for(gqlRequest).try?.start(gqlRequest)
+      try {
+        const result = await exec(gqlRequest)
+        // Stop the meter, request finished ok.
+        meter?.stop.ok(result)
+        return result
+      } catch(error) {
+        // Stop the meter, request failed.
+        meter?.stop.fail(error)
+        throw error
+      }
+    }
+  })
 }
 ```
 
-### 5. metrics
+Other plugins can associate their requests with this one, provided they have
+access to the scope object (the GraphQL Request object, in this case).
 
-### 6. execution middleware
+```typescript
+import * from '@apollo/metrics'
+// By convention, middleware chains are prefixed with 'mid'
+import { Execute } from '@apollo/server'
+import {Transact, Transaction} from '@hypothetical/db'
 
-### 7. a tracker app
+const TransactionMeter = request `Database Request for ${transact}` <Txn> ()
+export const DbTransaction = ref <Transaction> `Current transaction` ()
+
+export default TransactionsPlugin(transact: Transact) {
+  const meters = box(TransactionMeter)
+  const transaction = box(DbTransaction)
+  mid(Execute) ((exec, ctx) => {
+    return async gqlRequest => {
+      const meter = meters.for(gqlRequest).try
+      try {
+        const result = await transact(txn => {
+          transaction.for(gqlRequest)(txn)
+          meter?.start(txn)
+          return exec(gqlRequest)
+        })
+        meter?.stop.ok(result)
+        return result
+      } catch(error) {
+        // Stop the meter, request failed.
+        meter?.stop.fail(error)
+        throw error
+      }
+    }
+  })
+}
+```
+
+Collecting resolution times for individual fields:
+
+```typescript
+import {mid} from '@apollo/core'
+import {ResolveField} from '@apollo/server'
+import {timing} from '@apollo/metrics'
+
+const FieldResolutionMeter = timing <Field> `time to resolve field`
+
+export default FieldMetrics = () => {
+  const timer = box(FieldResolutionMeter)
+  mid(ResolveField)(resolve =>
+    <F extends Field>((field: F) => {
+      const next = resolve(field)
+      return timedResolve
+      function timedResolve(
+        self: FieldThis<F>,
+        args: FieldArgs<F>,
+        ctx: FieldCtx<F>) {
+        timer.for(ctx.request)
+          .measure(field, this, [self, args, ctx])
+      }
+    })
+  )
+}
+```
+
+Reporting collected metrics via an agent:
+
+```typescript
+import * from '@apollo/metrics'
+import {resource, did} from '@apollo/core'
+import ApolloAgent from '@apollo/agent'
+import {request, timing} from '@apollo/metrics'
+import {Execute} from '@apollo/server'
+
+export const MetricsEndpoint =
+  ref <string> `Metrics endpoint URL` ('https://default.url')
+
+export default box `Apollo Graph Manager Metrics Agent` (() => {
+  const url = read(MetricsEndpoint)
+  const agent = resource `metrics agent at ${url}` (
+    () => new ApolloAgent(url),  // acquire an agent
+    agent => agent.close()       // release the agent
+  )
+  did(Execute)((response, [req]) => {
+    const requests = request.for(req).try
+    const timings = [...timing.for(req).try]
+    agent.report({
+      request: req,
+      response,
+      timings,
+    })
+    // We don't have to clean up here, because we only read from the box.
+  })
+})
+```
+
+There's no limit to how many reporting agents you can have.
+
+### middleware
+
+Execution middleware gives us a lot of power.
+
+#### a safelist
+
+```typescript
+import { ref, plan, asSet, throws, box } from '@apollo/core'
+import { midExecute } from '@apollo/server'
+
+export const Allow = ref<string> `Allowed query` ()
+
+export const E_SAFELIST_REJECT
+  = throws('SAFELIST_REJECT', 'Query rejected by safelist')
+
+const Safelist = plan `Safelist — permits only Allowed queries` (() => {
+  // We could `read(Allow[asSet])` here, but then our middleware would
+  // regenerate every time the allowed set changed.
+  //
+  // By putting it in a box, we close over the box instead, avoiding
+  // the reflow.
+  const allowed = box(Allow[asSet])
+
+  midExecute(
+    exec => request => {
+      if (!allowed.contents.has(request.query))
+        throw E_SAFELIST_REJECT()
+      return exec(request.query)
+    }
+  )
+})
+```
+#### agent reporting
+
+We can capture all requests in the execution pipeline and report them
+
+* Operation registry — fixed finite set of evaluable queries
+* Query complexity break
+* APQ
+  * with reporting via Engine
+
+#### shimming existing lifecycle hooks
+
+TK. Short answer is, we can implement all of them by having Parse, Validate,
+and Execute refs, and by attaching `mid()`dleware to them:
+
+  * server{Will/Did}Start
+  * executionDid{Start,End}
+  * parsingDidStart, parsingDidEnd
+  * validationDidStart, parsingDidEnd
+  * requestDidStart
+  * didResolveOperation
+  * didEncounterErrors
+  * responseForOperation
+      * short-circuits execution
+  * willSendResponse
+
+
+### 7. query response caching
+* partial?
+
+### 8. find all providers of X
+* every declared datasource
+* all resolvers
+* sensibly call into other resolvers
+
+### 9. global config validation
+* one resolver per field
+* schema uses unknown directive
+    * scan all directives
+
+### pattern serialization?
+
+### error recovery
+* error boundaries
+* suspense boundaries
+
+### observability
+
+TK. Not entirely sure how to demonstrate this without mockups. Will probably show how you can query for the data necessary to do:
+
+* time travel
+* chain of custody
+  * timeline
+* post-hoc stack traces
+  * i.e. did something fail? even if we weren't tracking stack traces before, we
+  can switch it on, re-evaluate, and collect them (assuming it *does* fail).
+* part tree
+  * like the React component tree, but for data flows in your server.
+
+### things that do not work
+* Lifting off inside async functions
+  - like React, Liftoff functions must be sync
+  - inside Liftoff, you can read() async values
+
+  - You can `box()` up values to take out of Liftoff (into async land)
+  - `box().for()` lets you get values
+  -
+* Keying bit
+  - how we reconcile the set of calls when you re-call a function
+  -
+
+### 10. a tracker app
 
 Here's a project I was working on recently.
 
@@ -239,10 +915,10 @@ export const Mutation = {
 }
 
 export const Query = {
-  async nearby(_, args: { radius: number }): Many<Neighbor> {
+  nearby(_, args: { radius: number }): Many<Neighbor> {
     const {uid} = mustAuth()
     const my = queryTracker(tracker.doc(uid)) [one]
-    const center = await my.coordinates
+    const center = read(my.coordinates)
     return queryTracker(
       tracker.nearby({ center, radius })
     )({
@@ -288,114 +964,7 @@ We'll recompute the parts of the data flow that need to be recomputed, and send 
 
 #### 1e. but how?
 
-Here's what happens:
-
-1. We call `queryTracker`, which returns a `Many<TrackerDoc>`.
-2. We get the `[one]` row within that `Many<TrackerDoc>`, which returns `One<TrackerDoc>`. This behaves almost exactly like `Many<TrackerDoc>`, except for what happens when we `await` it, as we'll do in a moment.
-3. Given that, `my.coordinates` might seem very suspicious. But `One<R>` has all the fields of `R`, but hoisted into patterns themselves. So `my.coordinates` is `One<GeoPoint>`.
-4. When we await `my.coordinates` the first time, JS calls `my.coordinates.then`, which returns a `Promise<GeoPoint>`, which we `await` as usual.
-5. Run the rest of the pipeline, return the resulting `Many<Neighbor>`. We're assuming that the server machinery can pick this up and return whatever it needs to the client, which seems a fair assumption.
-
-But then, your location changes (because you called `moveTo`). How on earth does that propagate?
-
-If you haven't read [the ground up section](#liftoff-from-the-ground-up) above, now might be the time.
-
-6. First of all, Firestore is doing some work for us. It'll call a listener after the mutation occurs. When that listener gets called, it'll dispatch a change to the memo. That change will say: `my.coordinates.then` should return something else now. Specifically, it should return the updated value.
-7. The run loop will apply that change, and re-trace the parent `Call`s of `my.coordinates.then`.
-8. That'll cause our resolver call to return a new value, so we re-trace its parents, all the way up the stack, until we get to the part of the server that's going to send the response.
-9. That part of the server calls `delta(result)`, which returns the changed rows of any pattern. That's what it sends to the client.
-
-#### 1x. why not React?
-
-If I could do this on the frontend, I might ditch GraphQL (I know) and just use Firestore and React:
-
-```typescript
-const db = GeoFirestore(app.firestore().db())
-const users = db.collection('users')
-
-const Tracker = (props: { radius: number, children: any }) => {
-  const uid = useUid()
-  const location = useLocation()
-  useEffect(() => {
-    users.doc(uid).update({ location })
-  }, [location, uid])
-  const query = useMemo(() => users.near({ center: location, radius }),
-    [location, radius])
-  const nearby = useGeoQuery(query)
-  return children(nearby)
-}
-```
-
-Issues:
-
-  1. I can't do this on the frontend. I don't want to reveal users' actual locations to each other—just their distances. This is a hard product requirement: even though, yes, there are privacy implications to revealing your distance, revealing your actual lat/lon coordinates to anyone who asks is worse.
-  2. **This is still n<sup>2</sup>!! asdfjk#!$@#!!** Why? To move the center of the query, you have to create a new query. So `query` will change. So `useGeoQuery` will request a new snapshot, with a full set of all the changed data. Only now everything is getting sent to the frontend for processing, so it's worse.
-  3. Other parts of the API are going to be in GraphQL, and gosh it would be nice to just have one API in my frontend code. That's like literally the whole point of our company, right?
-
-So let's do this in GraphQL.
-
-
-
-
-```typescript=
-function plan() {
-  const count: number = read(
-    async function *getData(): number {
-      yield await 1
-      yield await 2
-      yield await 3
-    }, 0)
-  const serviceName: string = read(
-    async function *getLabel(): string {
-      while(true) {
-        yield await fetch(SERVICE_NAME_URL).text
-      }
-    },
-  )
-  return serviceName + number + 1
-}
-```
-
-```typescript=
-const User = {
-  name(user: { uid: string }) {
-    return source<string>(emit =>
-            db.collection('users')
-                .doc(uid)
-                .onSnapshot(snap => emit(snap.val().name))
-        )
-  },
-  feed(user: { uid: string }, _, ctx) {
-    const name = lastMemo()(ExecutableSchema)
-      .User.name(name => name(user), {}, ctx)
-    const feed = source<string[]>(emit =>
-      db.collection('feeds').doc(uid)
-        .onSnapshot(snap => emit(snap.val().items))
-    )
-    return feed.map(item => processTemplate(item, {name}))
-  }
-}
-```
-
-```typescript
-const and = remembered((x: boolean, y: boolean) => x && y)
-
-const input0 = ref(false)
-const output = ref()
-run(() => {
-  const input1 = source<boolean>(async function flip*() {
-    let value = true
-    while (true) {
-      emit(value)
-      value = !value
-      await sleep(10)
-    }
-  }, false)
-
-  output(and(input0, input1))
-})
-```
-
+Read on to [Liftoff from the ground up](#liftoff-from-the-ground-up)!
 
 ## From the ground up
 
@@ -706,9 +1275,9 @@ You may have noticed from the type of `Source` that `ref` can take a value:
 const MaxConcurrentQueries = ref(1024)
 ```
 
-In addition to letting us infer the type, this value also becomes the default value, which what ref projects if you map it and it's never been successfully defined. It does this with the hitherto unknown `[ifEmpty]` op:
+In addition to letting us infer the type, this value also becomes the default value, which what ref projects if you map it and it's never been successfully defined. It does this with the hitherto unknown `[ifEmpty]` op (line 12):
 
-```typescript
+```typescript=
 function ref<T>(input: Source<T> = (value: T) => value) {
   if (typeof input === 'function') {
     const output =
@@ -773,7 +1342,6 @@ memo(Schema).resolvers.User.name(name => name({ uid: 0 }))
 ```
 
 Which gives us a `Pattern<string>`. Seems like that trick might be useful later on.
-
 
 ### 5. god is change
 
@@ -934,7 +1502,7 @@ function run(block: () => void) {
 
 `Empty` returns an empty pattern, which we use to initialize `lastMemo`.
 
-### 8. don't keep me in suspense
+### 8. keep me in suspense
 
 tk
 
