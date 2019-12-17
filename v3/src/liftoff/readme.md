@@ -235,7 +235,7 @@ export const ExecutableSchema = ref `Executable GraphQL Schema` (() => {
 })
 ```
 
-## sources — representing changing values
+### sources — representing changing values
 
 Sources emit values.
 
@@ -405,7 +405,7 @@ export default ((resolvers: IResolvers) => {
 })
 ```
 
-## part — isolating failure and suspense
+### part — isolating failure and suspense
 
 Whenever we try to `read` something, we might end up failing or suspending.
 
@@ -512,7 +512,7 @@ Boxes also let you scope values.
 Let's associate the http request with the graphql request:
 
 ```typescript
-import * from '@apollo/metrics'
+import {request, timing} from '@apollo/metrics'
 
 // Scoped lets us associate plans with an object, i.e. the request.
 import { box } from '@apollo/core'
@@ -554,12 +554,12 @@ export default box `@ambient directive` ((name = 'ambient') => {
 })
 ```
 
-### 6. metrics
+### metrics
 
 Declaring and updating some metrics:
 
 ```typescript
-import * from '@apollo/metrics'
+import {request, timing} from '@apollo/metrics'
 
 import { scope, mid } from '@apollo/core'
 
@@ -595,7 +595,7 @@ Other plugins can associate their requests with this one, provided they have
 access to the scope object (the GraphQL Request object, in this case).
 
 ```typescript
-import * from '@apollo/metrics'
+import {request, timing} from '@apollo/metrics'
 // By convention, middleware chains are prefixed with 'mid'
 import { Execute } from '@apollo/server'
 import {Transact, Transaction} from '@hypothetical/db'
@@ -657,7 +657,7 @@ export default FieldMetrics = () => {
 Reporting collected metrics via an agent:
 
 ```typescript
-import * from '@apollo/metrics'
+import {request, timing} from '@apollo/metrics'
 import {resource, did} from '@apollo/core'
 import ApolloAgent from '@apollo/agent'
 import {request, timing} from '@apollo/metrics'
@@ -719,16 +719,11 @@ const Safelist = plan `Safelist — permits only Allowed queries` (() => {
   )
 })
 ```
-#### agent reporting
+#### APQ
 
-We can capture all requests in the execution pipeline and report them
+#### Query complexity
 
-* Operation registry — fixed finite set of evaluable queries
-* Query complexity break
-* APQ
-  * with reporting via Engine
-
-#### shimming existing lifecycle hooks
+### shimming existing lifecycle hooks
 
 TK. Short answer is, we can implement all of them by having Parse, Validate,
 and Execute refs, and by attaching `mid()`dleware to them:
@@ -745,15 +740,15 @@ and Execute refs, and by attaching `mid()`dleware to them:
   * willSendResponse
 
 
-### 7. query response caching
+### query response caching
 * partial?
 
-### 8. find all providers of X
+### find all providers of X
 * every declared datasource
 * all resolvers
 * sensibly call into other resolvers
 
-### 9. global config validation
+### global config validation
 * one resolver per field
 * schema uses unknown directive
     * scan all directives
@@ -789,7 +784,7 @@ TK. Not entirely sure how to demonstrate this without mockups. Will probably sho
   - how we reconcile the set of calls when you re-call a function
   -
 
-### 10. a tracker app
+### a tracker app
 
 Here's a project I was working on recently.
 
