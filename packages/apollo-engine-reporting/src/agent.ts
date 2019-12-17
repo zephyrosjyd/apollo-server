@@ -201,7 +201,7 @@ export interface AddTraceArgs {
   schemaHash: string;
   queryString?: string;
   documentAST?: DocumentNode;
-  gqlValidationFailure: boolean;
+  graphqlValidationFailure: boolean;
 }
 
 const serviceHeaderDefaults = {
@@ -288,7 +288,7 @@ export class EngineReportingAgent<TContext = any> {
     operationName,
     queryString,
     schemaHash,
-    gqlValidationFailure,
+    graphqlValidationFailure,
   }: AddTraceArgs): Promise<void> {
     // Ignore traces that come in after stop().
     if (this.stopped) {
@@ -321,8 +321,8 @@ export class EngineReportingAgent<TContext = any> {
         trace.unexecutedOperationBody = queryString;
         trace.unexecutedOperationName = operationName;
       }
-    } else if (gqlValidationFailure) {
-      statsReportKey = `## GraphQLFailure`;
+    } else if (graphqlValidationFailure) {
+      statsReportKey = `## GraphQLValidationFailure`;
       if (this.options.sendOperationDocumentsOnUnexecutableOperation && queryString) {
         trace.unexecutedOperationName = queryString;
         trace.unexecutedOperationName = operationName;
