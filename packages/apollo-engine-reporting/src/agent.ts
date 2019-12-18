@@ -202,6 +202,7 @@ export interface AddTraceArgs {
   queryString?: string;
   documentAST?: DocumentNode;
   graphqlValidationFailure: boolean;
+  graphqlUnknownOperationName: boolean;
 }
 
 const serviceHeaderDefaults = {
@@ -289,6 +290,7 @@ export class EngineReportingAgent<TContext = any> {
     queryString,
     schemaHash,
     graphqlValidationFailure,
+    graphqlUnknownOperationName,
   }: AddTraceArgs): Promise<void> {
     // Ignore traces that come in after stop().
     if (this.stopped) {
@@ -315,7 +317,13 @@ export class EngineReportingAgent<TContext = any> {
     let statsReportKey: string;
     // It's important to check parse failure first, since parse failures always
     // indicate validation failure
-    if (!documentAST) {
+    if (graphqlUnknownOperationName) {
+      statsReportKey = `## GraphQLUnknownOperationName`;
+      if (this.options.sendOperationDocumentsOnUnexecutableOperation && queryString) {
+        trace.unexecutedOperationBody = queryString;
+        trace.unexecutedOperationName = operationName;
+      }
+    } else if (!documentAST) {
       statsReportKey = `## GraphQLParseFailure`;
       if (this.options.sendOperationDocumentsOnUnexecutableOperation && queryString) {
         trace.unexecutedOperationBody = queryString;

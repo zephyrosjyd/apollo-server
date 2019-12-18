@@ -33,6 +33,7 @@ export class EngineReportingExtension<TContext = any>
   private treeBuilder: EngineReportingTreeBuilder;
   private explicitOperationName?: string | null;
   private graphqlValidationSucceeded?: boolean;
+  private graphqlUnknownOperationName: boolean;
   private queryString?: string;
   private documentAST?: DocumentNode;
   private options: EngineReportingOptions<TContext>;
@@ -54,6 +55,7 @@ export class EngineReportingExtension<TContext = any>
     this.treeBuilder = new EngineReportingTreeBuilder({
       rewriteError: options.rewriteError,
     });
+    this.graphqlUnknownOperationName = false;
   }
 
   public requestDidStart(o: {
@@ -138,7 +140,6 @@ export class EngineReportingExtension<TContext = any>
         .forbiddenOperation;
       this.treeBuilder.trace.registeredOperation = !!o.requestContext.metrics
         .registeredOperation;
-
       // If the user did not explicitly specify an operation name (which we
       // would have saved in `executionDidStart`), but the request pipeline made
       // it far enough to figure out what the operation name must be and store
@@ -165,6 +166,7 @@ export class EngineReportingExtension<TContext = any>
 
       this.addTrace({
         graphqlValidationFailure,
+        graphqlUnknownOperationName: this.graphqlUnknownOperationName,
         operationName,
         queryHash,
         documentAST,
@@ -190,6 +192,9 @@ export class EngineReportingExtension<TContext = any>
       this.explicitOperationName = o.executionArgs.operationName;
     }
     this.documentAST = o.executionArgs.document;
+    if (this.explicitOperationName && !this.documentAST) {
+      this.graphqlUnknownOperationName = true;
+    }
   }
 
   public willResolveField(
