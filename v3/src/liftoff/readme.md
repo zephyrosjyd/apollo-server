@@ -26,51 +26,170 @@ In Liftoff, we can retry functions after they fail. We can synchronously read th
 
 👁To see what you can do with it, continue to [from above](#From-above).
 
-## From above
+## TODO / Status
 
-### code as configuration
+This reflects an evolving thought process, so it's inconsistent in many places.
+- [ ] Change all `Ref()` to `def(Ref) ()`
+
+### from 1:1 with ben
+- Maybe start with "what's wrong with hooks?"
+- Motivate template literals
+- Add some verbs! Definitely do the `def()` thing
+- Keep it sync
+- @wry/task — a promise-like thing
+- re: source emitters
+    - emit is nice!
+- ben is excited!
+- build a moat
+  - do interesting things!
+
+## Programming Model: Liftoff from above
+
+### Code as configuration
 
 You configure the system with code.
 
-```typescript
-import { Apollo, Server, Schema, Resolvers } from '@apollo/core'
+```typescript=
+import { Launch, def } from '@apollo/liftoff'
+import { Server, Schema, Resolvers } from '@apollo/server'
 import { Billing } from '@hypothetical/plugins'
-import { ambient, todo } from './directives'
 import typeDefs from './schema.gql'
 import resolvers from './schema.resolver'
 
-Apollo(() => {
+Launch(() => {
   Server()
-  Schema(typeDefs, { ambient, todo })
-  Resolvers(resolvers)
   Billing()
+  def(Schema) (typeDefs)
+  def(Resolvers) (resolvers)
 })
 ```
 
 The order of these calls doesn't matter.
 
-### composable configuration
+### Composable configuration
 
 Because you configure with code, you might assume you can do things like this:
 
-```typescript
-import { Apollo, Server, Schema, Resolvers }
-  from '@apollo/core'
-import { Billing } from '@hypothetical/plugins'
-import { DevTools } from '@hypothetical/plugins'
-import { ambient, todo } from './directives'
-import typeDefs from './schema.gql'
-import resolvers from './schema.resolver'
-
+```typescript=8
 function Base() {
   Server()
   Billing()
 }
 
-Apollo(() => {
+Launch(() => {
   Base()
-  Schema(typeDefs, { ambient, todo })
-  Resolvers(resolvers)
+  def(Schema) (typeDefs)
+  def(Resolvers) (resolvers)
+
+  if (process.env.NODE_ENV === 'development') {
+    Introspection()
+    ServerDevTools()
+  }
+})
+```
+
+You would be correct.
+
+### Automatic plumbing
+
+Liftoff lets us pass data between distant parts of our program without worrying about how it gets there.
+
+We accomplish this with `ref`s and `def`s.
+
+#### Example: Setting an API key
+
+```typescript
+/******** shopify.ts ********/
+
+import { read, ref } from '@apollo/liftoff'
+
+// You write refs at the top level and export them.
+export const ShopifyApiKey =
+  // type 👇🏽    👇🏽  label (optional, nice for debugging)
+  ref <string> `Api Key for Shopify API` ()
+  //     default (optional, empty here)  🖕🏽
+
+export function Shopify() {
+  // read(ref) synchronously returns the value of a ref.
+  //
+  // (Typescript will infer the type, I'm writing it here for
+  // clarity.)
+  const key: string = read(ShopifyApiKey)
+  //
+  // Now do something with the key
+  //
+}
+```
+
+```typescript
+/******** keys.ts ********/
+
+import { def } from '@apollo/liftoff'
+import { ShopifyApiKey } from './shopify'
+
+export function Keys() {
+  if (process.env.NODE_ENV === 'development')
+    def (ShopifyApiKey) ('some-dev-key')
+  else
+    def (ShopifyApiKey) (process.env.SHOPIFY_API_KEY)
+  // Other keys...
+}
+```
+
+```typescript
+/******** main.ts ********/
+
+import { Launch, def } from '@apollo/liftoff'
+import { Keys } from './keys.ts'
+import { Shopify } from './shopify.ts'
+
+Launch(() => {
+  Shopify()
+  Keys()
+})
+```
+
+In this case, we're calling both `Shopify` and `Keys` from the same function, so we could have done this manually. For example, we could have had Keys return an object with all our API keys, then passed them into each plugin directly. But as our system grows, this will make the plumbing in our top-level configuration more and more complex.
+
+Liftoff does the plumbing for us, using refs as the pipes. Refs:
+  - Are plain old objects
+  - Are immutable (they come frozen)
+  - Are declared at the top level of some module
+  - Can be `def`ined from any part of the system
+  - Can be `read` from any part of the system
+
+:::info
+**Implementation note**: Liftoff accomplishes this by maintaining an internal `Map` from refs to their definitions.
+:::
+
+### Restriction: You can't use Liftoff within async functions
+
+:::danger
+**<div style='text-align: center'>⚠️ You can't use Liftoff within async functions.</div>**
+:::
+
+Much like React components, Liftoff functions must be synchronous.
+
+That means you can't `def` or `read` within async functions.
+
+:::info
+**Why not?**: To work correctly, Liftoff needs to be at the root of the call tree (this is part of what `Launch` does). It isn't currently possible to do this in a reliable way with async functions, so we don't even try.
+:::
+
+However, also like React components, there are still ways to work with async data within Liftoff.
+
+### Asynchronous configuration
+
+We can use `def.async` to asynchronously define a ref:
+
+```typescript
+Launch(() => {
+  Base()
+  def.async(Schema) (async () => {
+    const typeDefs = await fetchText('https://some.url/with/the/schema.gql')
+    return typeDefs
+  })
+  def(Resolvers) (resolvers)
 
   if (process.env.NODE_ENV === 'development') {
     DevTools()
@@ -78,330 +197,298 @@ Apollo(() => {
 })
 ```
 
-You would be correct.
+The function we pass to `def.async` can return either a `Promise` or an `AsyncIterable`[^also-sync]. For example, we can poll for schema updates like so:
 
-### refs — referring to configurable data
+[^also-sync]: It can also return a synchronous value, but in that case, `def` is a better choice.
 
-We can use `ref`s to define data that we want someone else to provide.
+```typescript
+Launch(() => {
+  Base()
+  def.async(Schema) (function *() {
+    while (true) {
+      yield await fetchText('https://some.url/with/the/schema.gql')
+      await sleep(1000)
+    }
+  })
+  def(Resolvers) (resolvers)
+
+  if (process.env.NODE_ENV === 'development') {
+    DevTools()
+  }
+})
+```
+
+**How we define a `ref` makes no difference to the consumer.** Even if we've defined a ref asynchonously with `def.async(someRef)`, `read(someRef)` will still return its value synchronously.
+
+Also: **If we `read` a ref and then it changes, Liftoff handles this for us!** Liftoff will re-evaluate the function which called `read`, this time returning the new value. This is much like state / `useState` in React.
+
+Unlike React, we can change the definitions of a ref from anywhere in the system, and Liftoff will send those new values to all everyone who's `read` the ref.
+
+### Refs with multiple values
+
+Since we can `def` a ref anywhere, it's possible that a `ref` will have multiple definitions. This is fine!
 
 A toy example:
 
-#### providing toys
-
-```typescript
-/******** main.ts ********/
-
-import { Apollo } from '@apollo/core'
-import { Toy, ToyPlugin } from './toy.ts'
-
-Apollo(() => {
-  // We can provide Toys from anywhere, before or after their
-  // consumer is defined.
-  Toy('talula')
-  StoryToys()
-  ToyPlugin()  // 👈🏽 consumer will be defined in here (below)
-  Toy('mr. winkles')
-})
-
-function StoryToys() {
-  Toy('woody')
-  Toy('mr. potatohead')
-  Toy('little bo peep')
-}
-```
-
-#### defining and consuming toys
+#### Example: Using `select` to retrieve all values for a ref
 
 ```typescript
 /******** toy.ts ********/
 
-import { ref } from '@apollo/core'
+import { select, str } from '@apollo/liftoff'
 
-// You generally write refs at the top level and export them
-export const Toy =
-  // type 👇🏽    description 👇🏽
-  ref <string> `The name of a toy` () // 👈🏽 default value (optional, empty here)
+// `str` is a synonym for `ref <string>`
+export const Toy = str `The name of a toy` ()
+
+export function ToyPlugin() {
+  // We can `select` all the Toys and iterate over them:
+  for (const toy of select(Toy)) {
+    // play with each toy
+    //
+    // Toy iterates in the order toys were defined.
+  }
+}
+```
+
+```typescript
+/******** main.ts ********/
+
+import { Launch } from '@apollo/liftoff'
+import { Toy, ToyPlugin } from './toy.ts'
+
+Launch(() => {
+  // We can define Toys anywhere, before or after their
+  // consumer is defined.
+  def(Toy) ('talula')
+  StoryToys()
+  ToyPlugin()  // 👈🏽 we select(Toy) in here
+  def(Toy) ('mr. winkles')
+})
+
+function StoryToys() {
+  def(Toy) ('woody')
+  def(Toy) ('mr. potatohead')
+  def(Toy) ('little bo peep')
+}
+```
+
+We can also `read` a ref with multiple values:
+
+#### Example: Using `read` to retrieve one definition of a ref with many defs
+
+```typescript
+/******** toy.ts ********/
+
+import { read, str } from '@apollo/liftoff'
+
+export const Toy = str `The name of a toy` ()
 
 export ToyPlugin(() => {
-  // We can iterate over all Toys like so:
-  for (const toy of Toy) {
-    // play with each toy
-  }
-
-  // Want an array?
-  const toys: string[] = [...Toy]
-
-  // (TS will infer the type of toys. I'm writing it out for demonstration
-  // purposes.)
-
-  // So now:
-  //   toys = ['talula',
-  //           'mr. winkles',
-  //           'woody',
-  //           'mr. potatohead',
-  //           'little bo peep']
-  // And we can play with them.
+  const toy: string = read(Toy)
+  // Play with this toy
 })
 ```
 
-### `read()`ing refs
+Which `Toy` do we get? We get all of them.
 
-You can `read` the value of a ref:
+_How is this possible?_ Liftoff will _fork_ the reader, re-evaluating it once for each definition of the ref.
+
+If we don't want this behavior, we can enforce reading only a single value with `read` with `read.the`:
+
+#### Example: Using `read.the` to read exactly one definition from a ref
 
 ```typescript
-export const Planet = ref <string> `name of a planet` ()
+/******** shopify.ts ********/
 
-Apollo(() => {
-  Planet('Earth')
-  const planet = read(Planet)
+import { read, ref } from '@apollo/liftoff'
 
-  // `go` declares an an effect
-  // it reboots when its dependencies change
-  // like React, we do a shallow identity comparison of the
-  // deps.
-  //   this is 👇🏽 the dependency
-  go `print "${planet}"` (() => {
-    console.log(planet)
-  })
+export const ShopifyApiKey = str `Api Key for Shopify API` ()
+
+export function Shopify() {
+  // Read exactly one key.
+  const key: string = read.the(ShopifyApiKey)
+  //
+  // Now do something with the key
+  //
+}
+```
+
+Now if we've accidentally defined `ShopifyApiKey` multiple times, the plugin will fail until there is exactly one definition. **If `read.the` finds conflicting definitions, Liftoff will tell us the exact position of all of them—down to the file, line, and column**.
+
+### Suspense
+
+If you `read` a ref that has no values, Liftoff _suspends_ the function until values are available.
+
+Similarly, if you `read.the` a ref that has no values or more than one value, Liftoff suspends until there's exactly one.
+
+### Isolation
+
+When a function suspends, everything halts. That's not exactly ideal.
+
+We can use `part` to define isolated components:
+
+#### Example: Isolating suspense
+
+```typescript
+/******** shopify.ts ********/
+
+import { read, ref, part } from '@apollo/liftoff'
+
+export const ShopifyApiKey = str `Api Key for Shopify API` ()
+
+// label (optional, nice for debugging) 👇🏽
+export const Shopify = part `Shopify plugin` (() => {
+  // Read exactly one key, suspending this part until exactly one key is
+  // available.
+  const key: string = read.the(ShopifyApiKey)
+  // ...
 })
 ```
 
-That prints "Earth". But what does this do?
+Now, if `read.the` suspends, it will only suspend the `Shopify` part.
 
+
+### Working with rows: `select` and friends
+
+`select(someRef<R>)` returns `Rows<R>`.
+
+`Rows` is an immutable object with some helpful methods:
+
+#### `[map]` transforms rows
+
+<div style='margin-left: 2em'>
+
+##### `[map]<X>(project: (value: R) => X): Rows<X>`
+Maps the value in each row.
+
+###### Example, uppercase all toys:
 ```typescript
-export const Planet = ref <string> `name of a planet` ()
-
-Apollo(() => {
-  Planet('Mercury')
-  Planet('Venus')
-  Planet('Earth')
-  Planet('Mars')
-
-  const planet = read(Planet)
-  go `print "${planet}"` (() => {
-    console.log(planet)
-  })
-})
+select(Toy)[map](toy => toy.toLocaleUppercase())
 ```
 
-`Planet` is a `ref<string>`, so `read` will return a string.
+##### `[map]<F extends keyof R>(field: keyof R): Rows<R[F]>`
+Pluck a single value from each row.
 
-But there are multiple `Planet`s. So `read` returns multiple times.
+###### Example, length of all toy names:
+```typescript
+select(Toy)[map]('length')
+```
 
-Liftoff _blooms_ the caller. It re-evaluates once for each defined value of `Planet`.
+`[map]` can perform various other reshapings as well (TK: API Docs).
+</div>
 
-### implementing schema modules
+#### **`[where]` picks a subset of rows**
 
-We now know enough to understand how the server collects all those `Schema` and
-`Resolvers` calls into an executable schema:
+<div style='margin-left: 2em'>
+
+##### `[where](R => boolean)`
+Filters rows by a predicate.
+
+###### Example: Toys with long names
+```typescript
+select(Toy)[where](toy => toy.length > 100)
+```
+
+##### `[where](rows: Rows<any>)`
+Returns the intersection of these rows and another set of rows.
+
+###### Example: Get the length of all toys that start with "mr.":
+```typescript
+select(Toy)
+  [map]('length')
+  [where](
+    select(Toy)[where](toy => toy.startsWith('mr.'))
+  )
+```
+
+##### `[where]<F extends keyof R>(field: F, compare?: '=' | '<' | '>'..., other?: R[F])`
+Filters rows by a comparison on a given field.
+
+###### Example: Another way to get toys with long names
+```typescript
+select(Toy)[where]('length', '>', 100)
+```
+
+</div>
+
+### `[reduce]` aggregates rows
+
+<div style='margin-left: 2em'>
+
+#### `[reduce]<X>((memo: X, value: R) => X, initial?: X): Rows<X>`
+Reduce all rows into one.
+
+##### Example: Join toys with commas
+```typescript
+select(Toy)[reduce]((str: string, toy) => str + ',' + toy)
+```
+
+</div>
+
+### `[value]` reads values
+
+<div style='margin-left: 2em'>
+
+##### Example: Get the string value of the above.
+```typescript
+select(Toy)
+  [reduce]((str: string, toy) => str + ',' + toy)
+  [value]
+```
+
+`[value]` is exactly equivalent to `read(rows)`, which also works—you can `read` both `ref`s and `Rows`. (`[value]` is provided for chaining convenience.)
+
+</div>
+
+`Rows` has various other useful query methods (including the ability to `[join]` with another set of rows, ala SQL) but these are the basics.
+
+:::info
+**Implementation note**: It may seem that `Rows` wraps an array, but this isn't true. Rows are implemented with a `Map` from `ID`s to `Row` objects. This helps us maintain the identity of rows—even if their value is just some primitive, e.g. when we have `Rows<string>`. For instance, this is how the intersection behavior of `[where]` works.
+:::
+
+## Advanced examples
+
+### Schema modules
+
+Here's how we might compose multiple `def(Schema)`s into a single `ExecutableSchema`:
 
 ```typescript
-import {ref, single, reduce, condense, value}
+import {ref, reduce, condense, value}
   from 'apollo-server'
 
-// You can specify refs as functions.
+// A ref with some internal structure.
 //
-// Doing so lets you format arguments into objects. Compare: Redux action
-// creators.
-//
-// The ref takes on the function's return value. So this is
-// a Ref<{ typeDefs: string, directives: IDirectives }>
-export const Schema = ref `GraphQL Schema Definition` (
-  (typeDefs: string, directives: IDirectives) => ({
-    typeDefs, directives
-  }))
+// Defining a ref like this lets you access named columns. For instance,
+// we can now access Schema.typeDefs and Schema.directives. These
+// will be Ref<string> and Ref<IDirectives>, respectively.
+export const Schema = ref `GraphQL Schema Definition` ({
+  typeDefs: str `Schema Type Definitions` (),
+  directives: obj <IDirectives> `Schema directives` (),
+})
 
 // A less fancy ref.
-export const Resolvers = ref<IResolvers>()
+export const Resolvers = obj<IResolvers>()
 
 export const ExecutableSchema = ref `Executable GraphQL Schema` (() => {
-  const typeDefs = read(
-    Schema.typeDefs[reduce](mergeSchemas)
-  )
+  const typeDefs =
+    select(Schema.typeDefs)
+      [reduce](mergeSchemas)
+      [value]
 
-  const schemaDirectives = read(
-    Schema.directives[condense]
+  const schemaDirectives =
+    select(Schema.directives)
+      [condense]
       // [condense] merges all rows together. It's equivalent to:
       //   [reduce]((all, these) => ({ ...all, ... these }))
-  )
+      [value]
 
-  const resolvers = read(Resolvers[condense])
+  const resolvers = select(Resolvers)[condense][value]
 
   return createAndValidateExecutableSchema({
     typeDefs,
     resolvers,
     schemaDirectives
   })
-})
-```
-
-### sources — representing changing values
-
-Sources emit values.
-
-### a ticker
-
-```typescript
-import {go, source} from '@apollo/core'
-
-const seconds = source <number> `seconds elapsed, very approximate` (emit => {
-  // go defines an effect.
-  go(() => {
-    let count = 0
-    const interval = setInterval(() => emit(count++), 1000)
-
-    // Like React's useEffect, go effects return dispose functions
-    return () => clearInterval(interval)
-  })
-})
-```
-
-To read a source, we can put it in a box:
-
-```typescript
-export default `Count schema` (() => {
-  Schema(`
-    extend Query {
-      motd: String
-    }
-  `)
-  const sec: Cell<number> = box(seconds)
-  Resolvers({
-    Query: {
-      seconds() {
-        return sec.value
-      }
-    }
-  })
-})
-```
-
-`sec` is a box holding the current value of seconds. Think of a cell in a spreadsheet. A box is a stable object that holds a changing value.  Whenever seconds emits (about once per second) we scribble out the old value and put a new one in the box.
-
-Cells help us pass source values into closures. If we did this:
-
-```typescript
-  // Probably don't do this:
-  const secondsNum: number = read(seconds)
-  Resolvers({
-    Query: {
-      seconds() {
-        return sec
-      }
-    }
-  })
-})
-```
-
-It would work. Every time `seconds` emitted a new value, `read(seconds)` would return, we'd re-evaluate the caller. This would dispose of the previous `Resolvers` and create new ones that close over the new `secondsNum`.
-
-It's all a bit much. To avoid the re-evaluation, we put the source in a box. When you `box` a source, you always get the same object back. Since the box itself never changes identity, the `seconds` resolver can safely close over it, fetching its `.value` anew with each request.
-
-A less contrived example: a message of the day.
-
-### message of the day
-
-```typescript
-import {box, ref} from '@apollo/core'
-import {pollJson} from './poll'
-
-const motdUrl = ref <string> `Message of the day URL` ()
-
-export default (() => {
-  const motd = box(() => pollJson(read(motdUrl), 1000 * 60 * 60 * 12))
-
-  // box.value will be changing under us. But the box stays stable, so we
-  // don't re-evaluate when the value changes. That's okay—we don't have to!
-  Schema(`
-    extend Query {
-      motd: String
-    }
-  `)
-  Resolvers({
-    Query: {
-      motd() {
-        return motd.value
-      }
-    }
-  })
-})
-```
-
-### dynamic config polled from a url
-
-Let's poll configuration from a URL.
-
-Define the poller:
-
-```typescript
-/******** poll.ts ********/
-
-import {source, go} from 'apollo-server'
-
-export const pollJson = <T extends object>(url: string, ms: number = 1000) =>
-  // A source takes a function that receives an emit function and
-  // calls it to emit some values.
-  source<T>((emit, fail) => ({
-    // `go` declares an an effect
-    // it reboots when its dependencies change
-    // like React, we do a shallow identity comparison of the
-    // deps.
-    //   these 👇🏽          👇🏽 are its dependencies
-    go `poll ${url} every ${ms}ms` (() => {
-      const iv = setInterval(async () => {
-        try {
-          emit(await getJson<T>(url))
-        } catch(err) {
-          fail(err)
-        }
-      }, ms)
-      return () => clearInterval(iv)
-    })
-  })
-```
-
-Use it to configure a schema:
-
-```typescript
-/******** gateway.ts ********/
-
-import {read, map, filter, condense, many} from '@apollo/core'
-import {pollJson} from './poll'
-import * as supported from './directives'
-
-interface IConfig {
-  typeDefs: string,
-  enabledDirectives: string[]
-}
-
-export const GatewayConfigUrl = ref <string> ()
-
-export default ((resolvers: IResolvers) => {
-  // Suspend until someone provides a GatewayConfigUrl, then start polling it.
-  const configSource = pollJson<IConfig>(read(GatewayConfigUrl))
-
-  // `read.deep` differs from `read` in that it performs a deep
-  // comparison of the object whenever the source emits and avoids emitting
-  // if the object hasn't changed.
-  const newConfig = read.deep(configSource)
-
-  // Let's suppose that in addition to the schema, config provides
-  // an array of enabled directives. How would we enable those?
-  const directives = read(
-    // many.unique<R>(iterable: R) creates a Many<R> holding the unique
-    // values yielded by the iterable.
-    //
-    // We could do this with array methods, but working with a Many means
-    // that when we get a new config, we only have to process the change,
-    // rather than having to re-process all the directives.
-    many.from(config.enabledDirectives)
-      [where](enabled => enabled in supported)
-      [map](enabled => ({ [enabled]: supported[enabled] }))
-      [condense]
-  )
-
-  // Finally, declare the schema.
-  Schema(config.typeDefs, directives)
 })
 ```
 
@@ -414,7 +501,7 @@ Currently, that means the whole system fails or suspends, which is not great!
 Breaking the system into `part`s gives us isolation:
 
 ```typescript
-import {read, ref} from '@apollo/core'
+import {read, ref} from '@apollo/liftoff'
 import {pollJson} from './poll'
 
 const motdUrl = ref <string> `Message of the day URL` ()
@@ -443,7 +530,7 @@ for it. "It" in this case will be a function.
 
 ```typescript
 /******** songs.resolvers.ts ********/
-import {read, Many} from '@apollo/core'
+import {read, Many} from '@apollo/liftoff'
 import {Song} from '@spotify/client'
 
 // You can have refs to functions too!
@@ -482,7 +569,7 @@ export default box(() => {
 
 ```typescript
 /******** spotify.ts ********/
-import {read,many} from '@apollo/core'
+import {read,many} from '@apollo/liftoff'
 import {getFavorites} from './songs.resolvers'
 import SpotifyClient, {Song} from '@spotify/client'
 
@@ -515,7 +602,7 @@ Let's associate the http request with the graphql request:
 import {request, timing} from '@apollo/metrics'
 
 // Scoped lets us associate plans with an object, i.e. the request.
-import { box } from '@apollo/core'
+import { box } from '@apollo/liftoff'
 
 import { Execute } from '@apollo/server'
 import { parseHttpRequest, sendResponse, sendError } from './httpTransport'
@@ -540,7 +627,7 @@ export default box <HttpHandler> (() =>
 Using it:
 
 ```typescript
-import {box} from '@apollo/core'
+import {box} from '@apollo/liftoff'
 import {ResolveArg} from '@apollo/server'
 import {http} from './httpHandler.ts'
 import {readAmbientArg} from './httpTransport.ts'
@@ -561,7 +648,7 @@ Declaring and updating some metrics:
 ```typescript
 import {request, timing} from '@apollo/metrics'
 
-import { scope, mid } from '@apollo/core'
+import { scope, mid } from '@apollo/liftoff'
 
 // By convention, middleware chains are prefixed with 'mid'
 import { Execute } from '@apollo/server'
@@ -630,7 +717,7 @@ export default TransactionsPlugin(transact: Transact) {
 Collecting resolution times for individual fields:
 
 ```typescript
-import {mid} from '@apollo/core'
+import {mid} from '@apollo/liftoff'
 import {ResolveField} from '@apollo/server'
 import {timing} from '@apollo/metrics'
 
@@ -658,7 +745,7 @@ Reporting collected metrics via an agent:
 
 ```typescript
 import {request, timing} from '@apollo/metrics'
-import {resource, did} from '@apollo/core'
+import {resource, did} from '@apollo/liftoff'
 import ApolloAgent from '@apollo/agent'
 import {request, timing} from '@apollo/metrics'
 import {Execute} from '@apollo/server'
@@ -694,7 +781,7 @@ Execution middleware gives us a lot of power.
 #### a safelist
 
 ```typescript
-import { ref, plan, asSet, throws, box } from '@apollo/core'
+import { ref, plan, asSet, throws, box } from '@apollo/liftoff'
 import { midExecute } from '@apollo/server'
 
 export const Allow = ref<string> `Allowed query` ()
