@@ -37,7 +37,7 @@ it('calls buildService only once per service', async () => {
   expect(buildServiceSpy).toHaveBeenCalledTimes(1);
 });
 
-it('correctly passes the context from ApolloServer to datasources', async () => {
+it.skip('correctly passes the context from ApolloServer to datasources', async () => {
   const gateway = new ApolloGateway({
     localServiceList: [accounts, books, inventory, product, reviews],
     buildService: service => {
@@ -108,7 +108,7 @@ function createSdlData(sdl: string): object {
   };
 }
 
-it('makes enhanced introspection request using datasource', async () => {
+it.skip('makes enhanced introspection request using datasource', async () => {
   fetch.mockJSONResponseOnce(
     createSdlData('extend type Query { one: String }'),
   );
@@ -145,7 +145,7 @@ it('makes enhanced introspection request using datasource', async () => {
   });
 });
 
-it('customizes request on a per-service basis', async () => {
+it.skip('customizes request on a per-service basis', async () => {
   fetch
     .mockJSONResponseOnce(createSdlData('extend type Query { one: String }'))
     .mockJSONResponseOnce(createSdlData('extend type Query { two: String }'))
