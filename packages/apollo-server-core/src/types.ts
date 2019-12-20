@@ -112,6 +112,7 @@ export interface Config extends BaseConfig {
   uploads?: boolean | FileUploadOptions;
   playground?: PlaygroundConfig;
   gateway?: GraphQLService;
+  experimental_approximateDocumentStoreSizeMiB?: number;
 }
 
 export interface FileUploadOptions {
