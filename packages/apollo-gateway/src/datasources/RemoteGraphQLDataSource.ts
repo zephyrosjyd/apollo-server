@@ -11,12 +11,12 @@ import {
 import {
   fetch,
   Request,
-  RequestInit,
   Headers,
   Response,
 } from 'apollo-server-env';
 import { isObject } from '../utilities/predicates';
 import { GraphQLDataSource } from './types';
+import createSHA from 'apollo-server-core/dist/utils/createSHA';
 
 export class RemoteGraphQLDataSource implements GraphQLDataSource {
   constructor(
@@ -51,35 +51,85 @@ export class RemoteGraphQLDataSource implements GraphQLDataSource {
       await this.willSendRequest({ request, context });
     }
 
-    const { http, ...graphqlRequest } = request;
-    const options: RequestInit = {
-      ...http,
-      body: JSON.stringify(graphqlRequest),
+    if (!request.query) {
+      throw new Error("Missing query");
+    }
+
+    const apqHash = createSHA('sha256')
+       .update(request.query)
+       .digest('hex');
+
+    const graphqlRequestApqOptimistic: Omit<typeof request, 'query'> = {
+      operationName: request.operationName,
+      variables: request.variables,
+
+      // Take the original extensions and extend them with
+      // the necessary APQ extension for the APQ handshaking.
+      extensions: {
+        ...request.extensions,
+        persistedQuery: {
+          version: 1,
+          sha256Hash: apqHash,
+        },
+      },
     };
 
-    const httpRequest = new Request(request.http.url, options);
+    const httpRequestApqOptimistic = new Request(request.http.url, {
+      ...request.http,
+      body: JSON.stringify(graphqlRequestApqOptimistic),
+    });
 
     try {
-      const httpResponse = await fetch(httpRequest);
+      const httpResponseApqOptimistic = await fetch(httpRequestApqOptimistic);
 
-      const body = await this.didReceiveResponse(
-        httpResponse,
-        httpRequest,
+      const bodyApqOptimistic = await this.didReceiveResponse<
+        Partial<GraphQLResponse>
+      >(httpResponseApqOptimistic, httpRequestApqOptimistic, context);
+
+      if (!isObject(bodyApqOptimistic)) {
+        throw new Error(
+          `Expected JSON response body, but received: ${bodyApqOptimistic}`);
+      }
+
+      // If we didn't receive notice to retry with APQ, then let's
+      // assume this is the best result we'll get and return it!
+      if (
+        !bodyApqOptimistic.errors ||
+        !bodyApqOptimistic.errors.find(error =>
+          error.message === 'PersistedQueryNotFound')
+      ) {
+        return {
+          ...bodyApqOptimistic,
+          http: httpResponseApqOptimistic,
+        };
+      }
+
+      // Run the same request again, but add in the previously omitted `query`.
+      const httpRequestApqMiss = new Request(request.http.url, {
+        ...request.http,
+        body: JSON.stringify({
+          ...graphqlRequestApqOptimistic,
+          query: request.query,
+        }),
+      });
+      const httpResponseApqMiss = await fetch(httpRequestApqMiss);
+      const bodyApqMiss = await this.didReceiveResponse<Partial<GraphQLResponse>>(
+        httpResponseApqMiss,
+        httpRequestApqMiss,
         context,
       );
 
-      if (!isObject(body)) {
-        throw new Error(`Expected JSON response body, but received: ${body}`);
+      if (!isObject(bodyApqMiss)) {
+        throw new Error(
+          `Expected JSON response body, but received: ${bodyApqMiss}`);
       }
 
-      const response: GraphQLResponse = {
-        ...body,
-        http: httpResponse,
+      return {
+        ...bodyApqMiss,
+        http: httpResponseApqOptimistic,
       };
-
-      return response;
     } catch (error) {
-      this.didEncounterError(error, httpRequest);
+      this.didEncounterError(error, httpRequestApqOptimistic);
       throw error;
     }
   }
