@@ -278,7 +278,7 @@ export default `Count schema` (() => {
 
 `sec` is a box holding the current value of seconds. Think of a cell in a spreadsheet. A box is a stable object that holds a changing value.  Whenever seconds emits (about once per second) we scribble out the old value and put a new one in the box.
 
-Cells help us pass source values into closures. If we did this:
+Boxes help us pass source values into closures. If we did this:
 
 ```typescript
   // Probably don't do this:
@@ -879,7 +879,7 @@ import {query} from './helpers'
 
 // These functions give us typed responses from DB queries.
 // It's like an ORM! Kindof! 😄
-const queryTracker = (q: firebase.Query | GeoQuery) =>
+const queryTracker = (q: firebase.Query | GeoQuery): Many<TrackerDoc> =>
   query<TrackerDoc>(q)
 
 const queryUsers = (q: firebase.Query | GeoQuery) =>
