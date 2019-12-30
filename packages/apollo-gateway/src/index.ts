@@ -57,7 +57,7 @@ interface GatewayConfigBase {
   experimental_updateServiceDefinitions?: Experimental_UpdateServiceDefinitions;
   experimental_didUpdateComposition?: Experimental_DidUpdateCompositionCallback;
   experimental_pollInterval?: number;
-  experimental_approximateQueryStoreSizeMiB?: number;
+  experimental_approximateQueryPlanStoreMiB?: number;
 }
 
 interface RemoteGatewayConfig extends GatewayConfigBase {
@@ -177,7 +177,7 @@ export class ApolloGateway implements GraphQLService {
   // how often service defs should be loaded/updated (in ms)
   protected experimental_pollInterval?: number;
 
-  private experimental_approximateQueryStoreSizeMiB?: number;
+  private experimental_approximateQueryPlanStoreMiB?: number;
 
   constructor(config?: GatewayConfig) {
     this.config = {
@@ -220,8 +220,8 @@ export class ApolloGateway implements GraphQLService {
       this.experimental_didUpdateComposition =
         config.experimental_didUpdateComposition;
 
-      this.experimental_approximateQueryStoreSizeMiB =
-        config.experimental_approximateQueryStoreSizeMiB;
+      this.experimental_approximateQueryPlanStoreMiB =
+        config.experimental_approximateQueryPlanStoreMiB;
 
       if (
         isManagedConfig(config) &&
@@ -614,7 +614,7 @@ export class ApolloGateway implements GraphQLService {
       // providing a caching document store for most operations.
       maxSize:
         Math.pow(2, 20) *
-        (this.experimental_approximateQueryStoreSizeMiB || 30),
+        (this.experimental_approximateQueryPlanStoreMiB || 30),
       sizeCalculator: approximateObjectSize,
     });
   }

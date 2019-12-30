@@ -153,8 +153,8 @@ export class ApolloServerBase {
   /** @deprecated: This is undefined for servers operating as gateways, and will be removed in a future release **/
   protected schema?: GraphQLSchema;
   private toDispose = new Set<() => void>();
-  private experimental_approximateDocumentStoreSizeMiB:
-    Config['experimental_approximateDocumentStoreSizeMiB'];
+  private experimental_approximateDocumentStoreMiB:
+    Config['experimental_approximateDocumentStoreMiB'];
 
   // The constructor should be universal across all environments. All environment specific behavior should be set by adding or overriding methods
   constructor(config: Config) {
@@ -178,7 +178,7 @@ export class ApolloServerBase {
       playground,
       plugins,
       gateway,
-      experimental_approximateDocumentStoreSizeMiB,
+      experimental_approximateDocumentStoreMiB,
       ...requestOptions
     } = config;
 
@@ -721,7 +721,7 @@ export class ApolloServerBase {
       // providing a caching document store for most operations.
       maxSize:
         Math.pow(2, 20) *
-        (this.experimental_approximateDocumentStoreSizeMiB || 30),
+        (this.experimental_approximateDocumentStoreMiB || 30),
       sizeCalculator: approximateObjectSize,
     });
   }
