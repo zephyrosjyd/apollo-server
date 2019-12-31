@@ -335,6 +335,7 @@ Columns give us various methods for working with their values.
 A toy example:
 
 #### Example: Using `select` to retrieve all values for a ref
+Boxes help us pass source values into closures. If we did this:
 
 ```typescript
 /******** toy.ts ********/
@@ -1023,7 +1024,7 @@ import {query} from './helpers'
 
 // These functions give us typed responses from DB queries.
 // It's like an ORM! Kindof! 😄
-const queryTracker = (q: firebase.Query | GeoQuery) =>
+const queryTracker = (q: firebase.Query | GeoQuery): Many<TrackerDoc> =>
   query<TrackerDoc>(q)
 
 const queryUsers = (q: firebase.Query | GeoQuery) =>
