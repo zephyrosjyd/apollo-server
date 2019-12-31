@@ -22,26 +22,18 @@ If you hate spreadsheets you should probably forget you read that sentence. In f
 
 In Liftoff, we can retry functions after they fail. We can synchronously read the value of promises. Functions can return multiple times, their results flowing around the system.
 
-🧠To learn how Liftoff works, jump to [from the ground up](#From-the-ground-up).
+🧠 To learn how Liftoff works, jump to [from the ground up](#From-the-ground-up).
 
-👁To see what you can do with it, continue to [from above](#From-above).
+👁 To see what you can do with it, continue to [from above](#From-above).
 
 ## TODO / Status
 
 This reflects an evolving thought process, so it's inconsistent in many places.
 - [ ] Change all `Ref()` to `def(Ref) ()`
-
-### from 1:1 with ben
-- Maybe start with "what's wrong with hooks?"
-- Motivate template literals
-- Add some verbs! Definitely do the `def()` thing
-- Keep it sync
-- @wry/task — a promise-like thing
-- re: source emitters
-    - emit is nice!
-- ben is excited!
-- build a moat
-  - do interesting things!
+- [ ] Update metrics examples to use `def.async`, a more elegant way to handle scoping
+- [ ] Discuss associated columns in Rows
+  - [ ] Using associated columns to provide input to Rows
+- [ ] Update behavior injection to use `Rows` with input data rather than a ref to a function
 
 ## Programming Model: Liftoff from above
 
@@ -90,31 +82,143 @@ Launch(() => {
 
 You would be correct.
 
+#### Isolation
+
+Right now, if one part of the system fails or blocks waiting for data, the whole thing stops. That's less than ideal.
+
+We can use `part` to define isolated components:
+
+```typescript
+import { part } from '@apollo/liftoff'
+
+// label (optional, nice for debugging) 👇🏽
+export const Shopify = part `Shopify plugin` (() => {
+  // …do plugin stuff…
+})
+```
+
+Now if the Shopify plugin fails, it doesn't take down the whole system.
+
+Parts are similar to error/suspense boundaries in React.
+
+:::danger
+**Restriction**: Parts cannot return a value. This is because if the part fails, it still needs to return normally so the rest of the system can boot. But if the part has failed, Liftoff won't know what to return!
+
+Don't worry, there are still ways to pass data between parts.
+:::
+
 ### Automatic plumbing
 
 Liftoff lets us pass data between distant parts of our program without worrying about how it gets there.
 
-We accomplish this with `ref`s and `def`s.
+To do this, we first define a column like so:
 
-#### Example: Setting an API key
+```typescript
+import { str } from '@apollo/liftoff'
+
+//                             👇🏽  type   👇🏽  label (optional, for debugging)
+export const MetricsEndpoint = str `Metrics endpoint (URL)` ()
+//             default value (optional, empty here)  🖕🏽
+```
+
+We typically define columns at the top level, exporting them from the module. Other modules can then import this column and define values with the `def` hook:
+
+```typescript
+import { def } from '@apollo/liftoff'
+import { MetricsEndpoint } from './metrics'
+
+Launch(() => {
+  def (MetricsEndpoint) ('https://...')
+  // …more stuff, presumably…
+})
+```
+
+To read the values in a column, we can `read` it:
+
+```typescript
+import { read, part } from '@apollo/liftoff'
+
+export const MetricsEndpoint = str `Metrics endpoint` ()
+
+export const MetricsAgent = part(() => {
+  //           👇🏽 typescript will infer this, I'm writing it here for clarity
+  const key: string = read(MetricsEndpoint)
+  // …work with the key…
+})
+```
+
+This will read the `MetricsEndpoint` column and return a synchronous value.
+
+#### Suspense
+
+What if we haven't `def`ined `MetricsEndpoint`?
+
+`read` will _suspend_ the current part until there's at least one value in the column.
+
+Compare: React suspense.
+
+#### Forks
+
+Okay, but what if we've `def`'d `MetricsEndpoint` multiple times?
+
+```typescript
+Launch(() => {
+  def (MetricsEndpoint) ('https://some.url/...')
+  def (MetricsEndpoint) ('https://another.url?')
+})
+```
+
+In this case, `read` will _fork_ the part, so we'll have two `MetricsAgent`s, each reporting to a different url.
+
+#### Arity
+
+In the above example, creating multiple reporting agents is probably good—it makes it easy to report to multiple endpoints. In cases where we don't want that behavior, we have some options.
+
+Option one: we can declare a column as containing only one value:
+
+```typescript
+export const ShopifyApiKey = one(str) `Shopify API Key` ()
+```
+
+This changes the default behavior of `read`. Now `read(ShopifyApiKey)` will suspend until there is exactly one value in the column.
+
+Option two: we can get the same behavior without changing the column's declaration by using `read.the` to read exactly one value from a column:
+
+```typescript
+export const ShopifyPlugin = part(() => {
+  const key: string = read.the(ShopifyApiKey)
+  // …work with the key…
+})
+```
+
+This will suspend the part until there is _exactly one_ value defined in the column.
+
+If we have `def`ined multiple values in a `one(column)`, we can still get the forking behavior of `read` like so:
+
+```typescript
+export const ShopifyPlugin = part(() => {
+  const key: string = read.all(ShopifyApiKey)
+  // …work with the key…
+})
+```
+
+The takeaway here is that column _arity_ (that is, whether a column can have one or multiple values) is essentially advisory. It's a note from the column definers to the column consumers about how many values to expect, and `read` changes its default behavior accordingly. But we can flip that by calling the appropriate variant of `read` directly.
+
+:::info
+**Implementation note:** Suspense in Liftoff works much like suspense in React. If a `read` fails because there are no values—or if `read.the` fails because there are too many values—we throw a non-Error object which tells Liftoff the conditions that must be met for the part to continue running.
+:::
+
+#### Full Example: Routing an API Key
 
 ```typescript
 /******** shopify.ts ********/
 
-import { read, ref } from '@apollo/liftoff'
+import { read, one, str } from '@apollo/liftoff'
 
-// You write refs at the top level and export them.
-export const ShopifyApiKey =
-  // type 👇🏽    👇🏽  label (optional, nice for debugging)
-  ref <string> `Api Key for Shopify API` ()
-  //     default (optional, empty here)  🖕🏽
+export const ShopifyApiKey = one(str) `Api Key for Shopify API` ()
 
 export function Shopify() {
-  // read(ref) synchronously returns the value of a ref.
-  //
-  // (Typescript will infer the type, I'm writing it here for
-  // clarity.)
-  const key: string = read(ShopifyApiKey)
+  const key: string = read.the(ShopifyApiKey)
   //
   // Now do something with the key
   //
@@ -149,20 +253,20 @@ Launch(() => {
 })
 ```
 
-In this case, we're calling both `Shopify` and `Keys` from the same function, so we could have done this manually. For example, we could have had Keys return an object with all our API keys, then passed them into each plugin directly. But as our system grows, this will make the plumbing in our top-level configuration more and more complex.
+#### Notes on columns
 
-Liftoff does the plumbing for us, using refs as the pipes. Refs:
+You can think of columns as pipes between (possibly distant) parts of the system. Columns:
   - Are plain old objects
   - Are immutable (they come frozen)
   - Are declared at the top level of some module
   - Can be `def`ined from any part of the system
   - Can be `read` from any part of the system
 
-:::info
-**Implementation note**: Liftoff accomplishes this by maintaining an internal `Map` from refs to their definitions.
-:::
+Columns do not hold any values. Instead, Liftoff maintains an internal `Map` from columns to their definitions. This allows it to implicitly do all the plumbing for us.
 
 ### Restriction: You can't use Liftoff within async functions
+
+Before we move on, a restriction to note:
 
 :::danger
 **<div style='text-align: center'>⚠️ You can't use Liftoff within async functions.</div>**
@@ -170,7 +274,7 @@ Liftoff does the plumbing for us, using refs as the pipes. Refs:
 
 Much like React components, Liftoff functions must be synchronous.
 
-That means you can't `def` or `read` within async functions.
+That means you can't `def`, `read`, or define columns within async functions.
 
 :::info
 **Why not?**: To work correctly, Liftoff needs to be at the root of the call tree (this is part of what `Launch` does). It isn't currently possible to do this in a reliable way with async functions, so we don't even try.
@@ -180,7 +284,7 @@ However, also like React components, there are still ways to work with async dat
 
 ### Asynchronous configuration
 
-We can use `def.async` to asynchronously define a ref:
+We can use `def.async` to asynchronously define column values:
 
 ```typescript
 Launch(() => {
@@ -218,15 +322,15 @@ Launch(() => {
 })
 ```
 
-**How we define a `ref` makes no difference to the consumer.** Even if we've defined a ref asynchonously with `def.async(someRef)`, `read(someRef)` will still return its value synchronously.
+**How we define a column makes no difference to the consumer.** Even if we've defined a column asynchonously with `def.async(someCol)`, `read(someCol)` will still return its values synchronously.
 
-Also: **If we `read` a ref and then it changes, Liftoff handles this for us!** Liftoff will re-evaluate the function which called `read`, this time returning the new value. This is much like state / `useState` in React.
+Also: **If we `read` a column and then it changes, Liftoff handles this for us!** Liftoff will re-evaluate the function which called `read`, this time returning the new value. This is much like state / `useState` in React.
 
-Unlike React, we can change the definitions of a ref from anywhere in the system, and Liftoff will send those new values to all everyone who's `read` the ref.
+Unlike React, we can change the definitions of a column from anywhere in the system, and Liftoff will send those new values to all everyone who's `read` the column.
 
-### Refs with multiple values
+### Working with multiple values
 
-Since we can `def` a ref anywhere, it's possible that a `ref` will have multiple definitions. This is fine!
+Columns give us various methods for working with their values.
 
 A toy example:
 
@@ -320,33 +424,6 @@ Now if we've accidentally defined `ShopifyApiKey` multiple times, the plugin wil
 If you `read` a ref that has no values, Liftoff _suspends_ the function until values are available.
 
 Similarly, if you `read.the` a ref that has no values or more than one value, Liftoff suspends until there's exactly one.
-
-### Isolation
-
-When a function suspends, everything halts. That's not exactly ideal.
-
-We can use `part` to define isolated components:
-
-#### Example: Isolating suspense
-
-```typescript
-/******** shopify.ts ********/
-
-import { read, ref, part } from '@apollo/liftoff'
-
-export const ShopifyApiKey = str `Api Key for Shopify API` ()
-
-// label (optional, nice for debugging) 👇🏽
-export const Shopify = part `Shopify plugin` (() => {
-  // Read exactly one key, suspending this part until exactly one key is
-  // available.
-  const key: string = read.the(ShopifyApiKey)
-  // ...
-})
-```
-
-Now, if `read.the` suspends, it will only suspend the `Shopify` part.
-
 
 ### Working with rows: `select` and friends
 
@@ -492,36 +569,16 @@ export const ExecutableSchema = ref `Executable GraphQL Schema` (() => {
 })
 ```
 
-### part — isolating failure and suspense
+:::danger
 
-Whenever we try to `read` something, we might end up failing or suspending.
+<div style='text-align: center'>
 
-Currently, that means the whole system fails or suspends, which is not great!
+**⚠️ These sections are currently in need of revision**
 
-Breaking the system into `part`s gives us isolation:
-
-```typescript
-import {read, ref} from '@apollo/liftoff'
-import {pollJson} from './poll'
-
-const motdUrl = ref <string> `Message of the day URL` ()
-
-export default part `Message of the day schema` (() => {
-  // If either of these reads fail, the Message of the day schema doesn't
-  // come up, but everything else is ok!
-  const motd = read(pollJson(read(motdUrl), 1000 * 60 * 60 * 12))
-  Schema(`
-    extend Query {
-      motd: String
-    }
-  `)
-  Resolvers({
-    Query: { motd() { return motd } }
-  })
-})
-```
+</div>
 
 ### injecting behavior
+
 
 You can inject behavior the same way you inject anything else: by making a ref
 for it. "It" in this case will be a function.
@@ -1047,6 +1104,8 @@ We'll recompute the parts of the data flow that need to be recomputed, and send 
 #### 1e. but how?
 
 Read on to [Liftoff from the ground up](#liftoff-from-the-ground-up)!
+
+:::
 
 ## From the ground up
 

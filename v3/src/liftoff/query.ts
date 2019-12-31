@@ -24,6 +24,10 @@ type Pattern<T> = {
 
 const project = Symbol('project')
 
+type ObjToParams<T extends object> = {
+  [keys in keyof T]: number
+}
+
 function isOk(call: Result<AnyFunc>) {
   if (call.type === 'returned') return call
   return
