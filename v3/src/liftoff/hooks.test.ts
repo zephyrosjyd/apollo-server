@@ -1,55 +1,90 @@
-import {hooks, provides, Scope, attach, current} from './hooks'
+import {hook, extend, apply, slot, set, prev, ancestry} from './hooks'
 
-describe('hooks', () => {
-  const Path = hooks({
-    name: '/',
-    path: '/',
+describe('scoped values', () => {
+  const name = slot('/')
+  const getPath = hook(() => '/')
+
+  it('start with the base implementation', () => {
+    expect(name.get()).toBe('/')
+    expect(getPath()).toBe('/')
   })
 
-  it('creates static accessors with the base implementation', () => {
-    expect(Path.name).toBe('/')
-    expect(Path.path).toBe('/')
+  describe('set', () => {
+    it('sets a scoped value', () => {
+      const meaning = slot(42)
+      expect(meaning.get()).toBe(42)
+      set(meaning, 52)
+      expect(meaning.get()).toBe(52)
+    })
+
+    it('sets the implementation of a hook', () => {
+      const meaning = hook(() => 42)
+      expect(meaning()).toBe(42)
+      set(meaning, () => 52)
+      expect(meaning()).toBe(52)
+    })
   })
 
-  const withName = (name: string) => ({
-    [provides]: [Path],
-    [attach]() {
-      const parent = Path[current]
-      return {
-        name,
-        get path() {
-          return parent?.path + '/' + name
-        }
-      }
-    }
+  describe('extend', () => {
+    it('changes the implementation of a hook via middleware', () => {
+      const meaning = hook(() => 42)
+      expect(meaning()).toBe(42)
+      extend(meaning, next => () => next() + 10)
+      expect(meaning()).toBe(52)
+    })
   })
 
-  describe('Scope.apply', () => {
-    it('applies a function with scope providers', () => {
+  describe('apply', () => {
+    it('applies a function in a new scope, taking an initializer', () => {
       let called = false
-      function getPath() {
+      const result = apply(() => getPath(), null, [], () => {
         called = true
-        return Path.path
-      }
-
-      const result = Scope.apply(getPath, null, [], withName('hello'))
+        extend(getPath, parent => () => parent() + '/' + name.get())
+        set(name, 'hello')
+      })
       expect(called).toBeTruthy()
       expect(result).toBe('//hello')
     })
 
-    it('stacks', () => {
-      function callPath(...path: string[]): string {
-        if (!path.length) return Path.path
-        return Scope.apply(callPath, null, path.slice(1), withName(path[0]))
-      }
-
-      const result = Scope.apply(callPath, null, ['world', 'a', 'b'], withName('hello'))
-      expect(result).toBe('//hello/world/a/b')
+    it('restores the previous scope on completion', () => {
+      apply(() => getPath(), null, [], () => {
+        extend(getPath, parent => () => parent() + '/' + name.get())
+        set(name, 'hello')
+      })
+      expect(getPath()).toBe('/')
     })
 
-    it('restores', () => {
-      expect(Path.path).toBe('/')
+    it('stacks recursively, of course', () => {
+      function callPath(...path: string[]): string {
+        if (!path.length) return getPath()
+        return apply(callPath, null, path.slice(1), () => {
+          extend(getPath, parent => () => parent() + '/' + path[0])
+        })
+      }
+
+      expect(callPath('hello', 'world', 'a', 'b', 'c'))
+        .toBe('//hello/world/a/b/c')
+      expect(getPath()).toBe('/')
     })
   })
 
+  describe('looking up the scope chain', () => {
+    it('prev(scoped) returns the previous value from a containing scope', () => {
+      apply(() => {
+        expect(name.get()).toBe('hello')
+        expect(prev(name)).toBe('/')
+      }, null, [], () => {
+        set(name, 'hello')
+      })
+    })
+
+    it('ancestry(scoped) returns an iterable of values from all containing scopes', () => {
+      function callPath(...path: string[]): string {
+        if (!path.length) return [...ancestry(name)].reverse().join('/')
+        return apply(callPath, null, path.slice(1), [name, path[0]])
+      }
+      expect(callPath('hello', 'world', 'a', 'b', 'c'))
+        .toBe('//hello/world/a/b/c')
+    })
+  })
 })
