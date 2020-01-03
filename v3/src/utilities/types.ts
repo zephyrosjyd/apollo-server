@@ -28,4 +28,7 @@ export interface Class<T> extends Constructor<T> {
   prototype: T
 }
 
+export type UnionToIntersection<U> =
+  (U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never
+
 export type Instance<C extends Class<any>> = C extends Class<infer I> ? I : never
