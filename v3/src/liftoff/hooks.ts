@@ -26,24 +26,23 @@ export function hook<F extends AnyFunc>(base: F): Hook<F> {
     [ID]: { value: id },
     [BASE]: { value: base },
   })
-  rootScope[id] = entry(id, base, rootScope)
-
+  set(dispatcher as any, base)
   return Object.freeze(dispatcher) as any
 
   function dispatcher(this: any, ...args: any[]) {
-    return Scope.current[id].value.apply(this, args)
+    return Current.scope[id].value.apply(this, args)
   }
 }
 
 export function slot<T>(base: T, name?: string): Slot<T> {
   const id = Symbol(name)
-  rootScope[id] = entry(id, base, rootScope)
-  const slot = Object.freeze({
+  const slot: Slot<T> = Object.freeze({
     [ID]: id,
     [BASE]: base,
     get() { return get(slot) },
     set(val: T) { set(slot, val) }
   })
+  set(slot, base)
   return slot
 }
 
@@ -54,7 +53,7 @@ interface Entry<S extends Scoped<any>> {
   prev?: Entry<S>
 }
 
-function entry<S extends Scoped<any>>(id: S[typeof ID], value: ScopedType<S>, scope = Scope.current) {
+function createEntry<S extends Scoped<any>>(id: S[typeof ID], value: ScopedType<S>, scope = Current.scope) {
   const prev: Entry<S> = scope[id]
   return {
     value, scope, prev
@@ -62,63 +61,82 @@ function entry<S extends Scoped<any>>(id: S[typeof ID], value: ScopedType<S>, sc
 }
 
 export function get<S extends Scoped<any>>(scoped: S): ScopedType<S> {
-  return Scope.current[scoped[ID]].value
+  return Current.scope[scoped[ID]].value
 }
 
 export function prev<S extends Scoped<any>>(scoped: S): ScopedType<S> | undefined {
-  return Scope.current[scoped[ID]]?.prev?.value
+  return Current.scope[scoped[ID]]?.prev?.value
 }
 
-export function *ancestry<S extends Scoped<any>>(scoped: S): Iterable<ScopedType<S>> {
-  let e = Scope.current[scoped[ID]]; while (e) {
+export function *ancestry<S extends Scoped<any>>(scoped: S, scope = Current.scope): Iterable<ScopedType<S>> {
+  let e = scope[scoped[ID]]; while (e) {
     yield e.value
     e = e.prev
   }
 }
 
-export function set<S extends Scoped<any>>(scoped: S, value: ScopedType<S>) {
+export function set<S extends Scoped<any>>(scoped: S, value: ScopedType<S>, scope = Current.scope) {
   const id = scoped[ID]
-  const current = Scope.current[id]
-  if (current.scope !== Scope.current)
-    Scope.current[id] = entry(id, value)
+  const entry = scope[id]
+  if (entry?.scope !== scope)
+    scope[id] = createEntry(id, value)
   else
-    current.value = value
+    entry.value = value
 }
 
 export function extend<S extends Scoped<any>>(scoped: S, mid: (current: ScopedType<S>) => ScopedType<S>) {
   set(scoped, mid(get(scoped)))
 }
 
-const rootScope = {} as any
-export const Scope: { current: any, finalizers: (() => void)[] } = {
-  current: rootScope
-} as any
+let nextScopeId = 0
 
-Object.defineProperty(Scope, 'finalizers', slot([], 'Scope finalizers'))
+export const Current: {
+  scope: any
+  onClose: (() => void)[]
+} = {} as any
 
-export function onDestroy(destroy: () => void) {
-  Scope.finalizers.push(destroy)
+Current.scope = createScope()
+
+export interface Scope {
+  [ID]: symbol
+}
+
+Object.defineProperty(Current, 'onClose', slot([], 'Scope.onClose'))
+
+export function onClose(close: () => void) {
+  Current.onClose.push(close)
 }
 
 type Initializer<S extends Scoped<any>> = (() => void) | [S, ScopedType<S>]
 
 export function apply<F extends AnyFunc>
-  (func: F, self: ThisParameterType<F>, params: Parameters<F>, ...initialize: Initializer<any>[]): ReturnType<F> {
-  const parent = Scope.current
-  Scope.current = Object.create(parent)
+  (func: F, self: ThisParameterType<F>, params: Parameters<F>, scope: Scope = Current.scope): ReturnType<F> {
+  const parent = Current.scope
+  Current.scope = scope
   try {
-    Scope.finalizers = []
+    return func.apply(self, params)
+  } finally {
+    const {onClose} = Current
+    let i = onClose.length; while (i --> 0)
+      onClose[i]()
+    Current.scope = parent
+  }
+}
+
+export function createScope(...initialize: Initializer<any>[]): Scope {
+  const parent = Current.scope
+  try {
+    Current.scope = parent ? Object.create(parent) : {}
+    Current.scope[ID] = Symbol(`Scope#${nextScopeId++}`)
+    Current.onClose = []
     const count = initialize.length
     for (let i = 0; i !== count; ++i) {
       const init = initialize[i]
       if (typeof init === 'function') init()
       else set(...init)
     }
-    return func.apply(self, params)
+    return Current.scope
   } finally {
-    const {finalizers} = Scope
-    let i = finalizers.length; while (i --> 0)
-      finalizers[i]()
-    Scope.current = parent
+    Current.scope = parent
   }
 }

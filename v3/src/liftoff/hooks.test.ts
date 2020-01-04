@@ -1,4 +1,4 @@
-import {hook, extend, apply, slot, set, prev, ancestry} from './hooks'
+import {hook, extend, apply, slot, set, prev, ancestry, createScope} from './hooks'
 
 describe('scoped values', () => {
   const name = slot('/')
@@ -37,29 +37,29 @@ describe('scoped values', () => {
   describe('apply', () => {
     it('applies a function in a new scope, taking an initializer', () => {
       let called = false
-      const result = apply(() => getPath(), null, [], () => {
+      const result = apply(() => getPath(), null, [], createScope(() => {
         called = true
         extend(getPath, parent => () => parent() + '/' + name.get())
         set(name, 'hello')
-      })
+      }))
       expect(called).toBeTruthy()
       expect(result).toBe('//hello')
     })
 
     it('restores the previous scope on completion', () => {
-      apply(() => getPath(), null, [], () => {
+      apply(() => getPath(), null, [], createScope(() => {
         extend(getPath, parent => () => parent() + '/' + name.get())
         set(name, 'hello')
-      })
+      }))
       expect(getPath()).toBe('/')
     })
 
     it('stacks recursively, of course', () => {
       function callPath(...path: string[]): string {
         if (!path.length) return getPath()
-        return apply(callPath, null, path.slice(1), () => {
+        return apply(callPath, null, path.slice(1), createScope(() => {
           extend(getPath, parent => () => parent() + '/' + path[0])
-        })
+        }))
       }
 
       expect(callPath('hello', 'world', 'a', 'b', 'c'))
@@ -73,15 +73,13 @@ describe('scoped values', () => {
       apply(() => {
         expect(name.get()).toBe('hello')
         expect(prev(name)).toBe('/')
-      }, null, [], () => {
-        set(name, 'hello')
-      })
+      }, null, [], createScope([name, 'hello']))
     })
 
     it('ancestry(scoped) returns an iterable of values from all containing scopes', () => {
       function callPath(...path: string[]): string {
         if (!path.length) return [...ancestry(name)].reverse().join('/')
-        return apply(callPath, null, path.slice(1), [name, path[0]])
+        return apply(callPath, null, path.slice(1), createScope([name, path[0]]))
       }
       expect(callPath('hello', 'world', 'a', 'b', 'c'))
         .toBe('//hello/world/a/b/c')
