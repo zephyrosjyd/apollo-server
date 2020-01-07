@@ -60,12 +60,12 @@ function createEntry<S extends Scoped<any>>(id: S[typeof ID], value: ScopedType<
   }
 }
 
-export function get<S extends Scoped<any>>(scoped: S): ScopedType<S> {
-  return Current.scope[scoped[ID]].value
+export function get<S extends Scoped<any>>(scoped: S, scope = Current.scope): ScopedType<S> {
+  return scope[scoped[ID]].value
 }
 
-export function prev<S extends Scoped<any>>(scoped: S): ScopedType<S> | undefined {
-  return Current.scope[scoped[ID]]?.prev?.value
+export function prev<S extends Scoped<any>>(scoped: S, scope = Current.scope): ScopedType<S> | undefined {
+  return scope[scoped[ID]]?.prev?.value
 }
 
 export function *ancestry<S extends Scoped<any>>(scoped: S, scope = Current.scope): Iterable<ScopedType<S>> {
