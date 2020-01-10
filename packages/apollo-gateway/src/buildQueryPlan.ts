@@ -423,20 +423,11 @@ function splitFields(
         //
         // This is an optimization to prevent an explosion of type conditions to
         // services when it isn't needed
-        const uniqueServices = new Set(
-          ...[
-            scope.possibleTypes.map(
-              ({ federation }) => federation && federation.serviceName
-            )
-          ]
+        const possibleFieldDefs = scope.possibleTypes.map(
+          runtimeType => context.getFieldDef(runtimeType, field.fieldNode),
         );
-
-        if (
-          uniqueServices.size === 1 &&
-          // the interface can be defined in a service outside of where the concrete types
-          // are defined, in that case we still need to expand the selection
-          uniqueServices.has(parentType.federation && parentType.federation.serviceName)
-        ) {
+        const federations = possibleFieldDefs.filter(def => !!def.federation);
+        if (federations.length === 0) {
           const group = groupForField(field as Field<GraphQLObjectType>);
           group.fields.push(
             completeField(context, scope, group, path, fieldsForResponseName)
