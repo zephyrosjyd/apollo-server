@@ -1,4 +1,4 @@
-import { AnyFunc } from "src/utilities/types"
+import { AnyFunc } from "../utilities/types"
 
 const ID = Symbol('ID for scoped value')
 const BASE = Symbol('Base value for scoped value')
