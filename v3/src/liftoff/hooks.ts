@@ -1,6 +1,7 @@
 import { AnyFunc } from "../utilities/types"
+import { symbols } from "../utilities"
+import { ID } from './id'
 
-const ID = Symbol('ID for scoped value')
 const BASE = Symbol('Base value for scoped value')
 
 export type Scoped<T> = {
@@ -19,8 +20,9 @@ export type Slot<T> = Scoped<T> & {
   set(value: T): void
 }
 
+const nextHookId = symbols('Hook')
 export function hook<F extends AnyFunc>(base: F): Hook<F> {
-  const id = Symbol(`Hook ${base.name}`)
+  const id = nextHookId(base.name)
   Object.defineProperties(dispatcher, {
     name: { value: base.name },
     [ID]: { value: id },
@@ -34,8 +36,9 @@ export function hook<F extends AnyFunc>(base: F): Hook<F> {
   }
 }
 
+const nextSlotId = symbols('Slot')
 export function slot<T>(base: T, name?: string): Slot<T> {
-  const id = Symbol(name)
+  const id = nextSlotId(name)
   const slot: Slot<T> = Object.freeze({
     [ID]: id,
     [BASE]: base,
@@ -88,11 +91,10 @@ export function extend<S extends Scoped<any>>(scoped: S, mid: (current: ScopedTy
   set(scoped, mid(get(scoped)))
 }
 
-let nextScopeId = 0
+const nextScopeId = symbols('Scope')
 
 export const Current: {
   scope: any
-  onClose: (() => void)[]
 } = {} as any
 
 Current.scope = createScope()
@@ -101,34 +103,29 @@ export interface Scope {
   [ID]: symbol
 }
 
-Object.defineProperty(Current, 'onClose', slot([], 'Scope.onClose'))
-
-export function onClose(close: () => void) {
-  Current.onClose.push(close)
-}
-
 type Initializer<S extends Scoped<any>> = (() => void) | [S, ScopedType<S>]
 
-export function apply<F extends AnyFunc>
-  (func: F, self: ThisParameterType<F>, params: Parameters<F>, scope: Scope = Current.scope): ReturnType<F> {
-  const parent = Current.scope
-  Current.scope = scope
-  try {
-    return func.apply(self, params)
-  } finally {
-    const {onClose} = Current
-    let i = onClose.length; while (i --> 0)
-      onClose[i]()
-    Current.scope = parent
+export const apply = hook(
+  function apply<F extends AnyFunc>
+    (func: F,
+      self: ThisParameterType<F>,
+      params: Parameters<F>,
+      scope: Scope = Current.scope): ReturnType<F> {
+    const parent = Current.scope
+    Current.scope = scope
+    try {
+      return func.apply(self, params)
+    } finally {
+      Current.scope = parent
+    }
   }
-}
+)
 
 export function createScope(...initialize: Initializer<any>[]): Scope {
   const parent = Current.scope
   try {
     Current.scope = parent ? Object.create(parent) : {}
-    Current.scope[ID] = Symbol(`Scope#${nextScopeId++}`)
-    Current.onClose = []
+    Current.scope[ID] = nextScopeId()
     const count = initialize.length
     for (let i = 0; i !== count; ++i) {
       const init = initialize[i]
