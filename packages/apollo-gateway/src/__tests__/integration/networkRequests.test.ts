@@ -21,7 +21,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-it('Queries remote endpoints for their SDLs', async () => {
+it.skip('Queries remote endpoints for their SDLs', async () => {
   const url = 'http://localhost:4001';
   const sdl = `
   extend type Query {
@@ -49,7 +49,7 @@ it('Queries remote endpoints for their SDLs', async () => {
 });
 
 // This test is maybe a bit terrible, but IDK a better way to mock all the requests
-it('Extracts service definitions from remote storage', async () => {
+it.skip('Extracts service definitions from remote storage', async () => {
   const serviceName = 'jacksons-service';
   const apiKeyHash = 'abc123';
 
