@@ -156,14 +156,22 @@ export class EngineReportingExtension<TContext = any>
           o.requestContext.metrics.queryPlanTrace;
       }
 
-      this.addTrace({
-        operationName,
-        queryHash,
-        documentAST,
-        queryString: this.queryString || '',
-        trace: this.treeBuilder.trace,
-        schemaHash: this.schemaHash,
-      });
+      // addTrace is an async function which we intentionally do not await here.
+      // Without further deferring to the next tick of the event loop using
+      // `setImmediate`, various competing microtasks are allowing `addTrace` to
+      // re-gain blocking control of the event-loop and delaying the return of
+      // the response to the client. This delay seems to be more pronounced in
+      // large responses which trigger more CPU-intensive JSON serialization.
+      setImmediate(() => {
+        this.addTrace({
+          operationName,
+          queryHash,
+          documentAST,
+          queryString: this.queryString || '',
+          trace: this.treeBuilder.trace,
+          schemaHash: this.schemaHash,
+        });
+      })
     };
   }
 
