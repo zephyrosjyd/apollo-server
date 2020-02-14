@@ -115,7 +115,7 @@ it('Extracts service definitions from remote storage', async () => {
   expect(gateway.schema!.getType('User')!.description).toBe('This is my User');
 });
 
-it('Rollsback to a previous schema when triggered', async () => {
+fit('Rollsback to a previous schema when triggered', async () => {
   const serviceName = 'jacksons-service';
   const apiKeyHash = 'abc123';
 
@@ -159,11 +159,11 @@ it('Rollsback to a previous schema when triggered', async () => {
   mockFetchStorageSecret({ apiKeyHash, serviceName }).reply(
     200,
     `"${storageSecret}"`,
-  );
+  ).log((message) => console.log('secret: ' + message));
 
   mockGetCompositionConfigLink(storageSecret).reply(200, {
     configPath: `${storageSecret}/current/v1/composition-configs/composition-config-path.json`,
-  });
+  }).log((message) => console.log('config link: ' + message));
 
   mockGetCompositionConfigs({
     storageSecret,
@@ -174,7 +174,7 @@ it('Rollsback to a previous schema when triggered', async () => {
         path: `${storageSecret}/current/v1/implementing-services/${federatedServiceName}/${implementingServicePath1}`,
       },
     ],
-  });
+  }).log((message) => console.log('configs: ' + message));
 
   mockGetImplementingServices({
     storageSecret,
@@ -184,22 +184,22 @@ it('Rollsback to a previous schema when triggered', async () => {
     name: federatedServiceName,
     partialSchemaPath: `${storageSecret}/current/raw-partial-schemas/${partialSchemaPath1}`,
     url: federatedServiceURL1,
-  });
+  }).log((message) => console.log('services: ' + message));
 
   mockGetRawPartialSchema({
     storageSecret,
     partialSchemaPath: partialSchemaPath1,
-  }).reply(200, federatedServiceSchema1);
+  }).reply(200, federatedServiceSchema1).log((message) => console.log('raw schema: ' + message));
 
   // Update 1
   mockFetchStorageSecret({ apiKeyHash, serviceName }).reply(
     200,
     `"${storageSecret}"`,
-  );
+  ).log((message) => console.log('update 1 - secret: ' + message));
 
   mockGetCompositionConfigLink(storageSecret).reply(200, {
     configPath: `${storageSecret}/current/v1/composition-configs/composition-config-path.json`,
-  });
+  }).log((message) => console.log('update 1 - config link: ' + message));
 
   mockGetCompositionConfigs({
     storageSecret,
