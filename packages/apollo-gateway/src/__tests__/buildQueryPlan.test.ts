@@ -709,10 +709,10 @@ describe('buildQueryPlan', () => {
             {
               topProducts {
                 __typename
-                ... on Book {
+                ... on Furniture {
                   price
                 }
-                ... on Furniture {
+                ... on Book {
                   price
                 }
               }
@@ -747,15 +747,15 @@ describe('buildQueryPlan', () => {
             {
               topProducts {
                 __typename
-                ... on Book {
-                  price
-                  __typename
-                  isbn
-                }
                 ... on Furniture {
                   price
                   __typename
                   upc
+                }
+                ... on Book {
+                  price
+                  __typename
+                  isbn
                 }
               }
             }
@@ -763,22 +763,22 @@ describe('buildQueryPlan', () => {
           Flatten(path: "topProducts.@") {
             Fetch(service: "reviews") {
               {
-                ... on Book {
-                  __typename
-                  isbn
-                }
                 ... on Furniture {
                   __typename
                   upc
                 }
+                ... on Book {
+                  __typename
+                  isbn
+                }
               } =>
               {
-                ... on Book {
+                ... on Furniture {
                   reviews {
                     body
                   }
                 }
-                ... on Furniture {
+                ... on Book {
                   reviews {
                     body
                   }
@@ -856,25 +856,25 @@ describe('buildQueryPlan', () => {
     const queryPlan = buildQueryPlan(buildOperationContext(schema, query));
 
     expect(queryPlan).toMatchInlineSnapshot(`
-    QueryPlan {
-      Fetch(service: "product") {
-        {
-          product(upc: "") {
-            __typename
-            ... on Book {
-              details {
-                country
+      QueryPlan {
+        Fetch(service: "product") {
+          {
+            product(upc: "") {
+              __typename
+              ... on Furniture {
+                details {
+                  country
+                }
               }
-            }
-            ... on Furniture {
-              details {
-                country
+              ... on Book {
+                details {
+                  country
+                }
               }
             }
           }
-        }
-      },
-    }
+        },
+      }
     `);
   });
 });
