@@ -31,7 +31,7 @@
     "fastify-accepts": "^0.5.0",
     "fastify-cors": "^0.2.0",
     "graphql-subscriptions": "^1.0.0",
-    "graphql-tools": "^4.0.0"
+    "graphql-tools": "https://s3.amazonaws.com/f.cl.ly/items/3q0M0A2q0e1l2T1v4332/graphql-tools-4.0.7.tgz"
   },
   "devDependencies": {
     "apollo-server-integration-testsuite": "file:../apollo-server-integration-testsuite"

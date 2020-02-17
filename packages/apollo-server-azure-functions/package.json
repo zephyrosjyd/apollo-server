@@ -30,7 +30,7 @@
 		"apollo-server-core": "file:../apollo-server-core",
 		"apollo-server-env": "file:../apollo-server-env",
 		"apollo-server-types": "file:../apollo-server-types",
-		"graphql-tools": "^4.0.0"
+		"graphql-tools": "https://s3.amazonaws.com/f.cl.ly/items/3q0M0A2q0e1l2T1v4332/graphql-tools-4.0.7.tgz"
 	},
 	"devDependencies": {
 		"apollo-server-integration-testsuite": "file:../apollo-server-integration-testsuite"

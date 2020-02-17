@@ -37,7 +37,7 @@
     "apollo-server-core": "file:../apollo-server-core",
     "apollo-server-types": "file:../apollo-server-types",
     "graphql-subscriptions": "^1.0.0",
-    "graphql-tools": "^4.0.0",
+    "graphql-tools": "https://s3.amazonaws.com/f.cl.ly/items/3q0M0A2q0e1l2T1v4332/graphql-tools-4.0.7.tgz",
     "koa": "2.11.0",
     "koa-bodyparser": "^4.2.1",
     "koa-compose": "^4.1.0",
