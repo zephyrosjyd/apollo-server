@@ -98,7 +98,7 @@
     "graphql": "15.0.0-rc.2",
     "graphql-subscriptions": "1.1.0",
     "graphql-tag": "2.10.3",
-    "graphql-tools": "4.0.6",
+    "graphql-tools": "http://f.cl.ly/items/3Q0C1K3S3P0M0u0W3z1K/graphql-tools-4.0.7.tgz",
     "hapi": "17.8.5",
     "ioredis": "4.14.1",
     "jest": "24.9.0",

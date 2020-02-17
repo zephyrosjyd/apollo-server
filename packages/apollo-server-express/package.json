@@ -38,7 +38,7 @@
     "cors": "^2.8.4",
     "express": "^4.17.1",
     "graphql-subscriptions": "^1.0.0",
-    "graphql-tools": "^4.0.0",
+    "graphql-tools": "http://f.cl.ly/items/3Q0C1K3S3P0M0u0W3z1K/graphql-tools-4.0.7.tgz",
     "parseurl": "^1.3.2",
     "subscriptions-transport-ws": "^0.9.16",
     "type-is": "^1.6.16"

@@ -31,7 +31,7 @@
     "apollo-server-types": "file:../apollo-server-types",
     "boom": "^7.1.0",
     "graphql-subscriptions": "^1.0.0",
-    "graphql-tools": "^4.0.0"
+    "graphql-tools": "http://f.cl.ly/items/3Q0C1K3S3P0M0u0W3z1K/graphql-tools-4.0.7.tgz"
   },
   "devDependencies": {
     "apollo-server-integration-testsuite": "file:../apollo-server-integration-testsuite"
