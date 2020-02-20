@@ -295,10 +295,6 @@ export class ApolloGateway implements GraphQLService {
       this.engineConfig = options.engine;
     }
 
-    const previousSchema = this.schema;
-    const previousServiceDefinitions = this.serviceDefinitions;
-    const previousCompositionMetadata = this.compositionMetadata;
-
     let result: Await<ReturnType<Experimental_UpdateServiceDefinitions>>;
     this.logger.debug('Loading configuration for gateway');
     try {
@@ -316,6 +312,10 @@ export class ApolloGateway implements GraphQLService {
       this.logger.debug('No change in service definitions since last check');
       return;
     }
+
+    const previousSchema = this.schema;
+    const previousServiceDefinitions = this.serviceDefinitions;
+    const previousCompositionMetadata = this.compositionMetadata;
 
     if (previousSchema) {
       this.logger.info('Gateway config has changed, updating schema');
