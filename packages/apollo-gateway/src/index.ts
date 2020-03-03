@@ -489,11 +489,11 @@ export class ApolloGateway implements GraphQLService {
         // We don't await this because a local configuration should assume
         // remote is unavailable for one reason or another.
         getRemoteConfig(this.engineConfig).then(() => {
-          // this.logger.warn(
-          //   "A local gateway service list is overriding an Apollo Graph " +
-          //   "Manager managed configuration.  To use the managed " +
-          //   "configuration, do not specifiy a service list locally.",
-          // );
+          this.logger.warn(
+            "A local gateway service list is overriding an Apollo Graph " +
+            "Manager managed configuration.  To use the managed " +
+            "configuration, do not specifiy a service list locally.",
+          );
         }).catch(() => {}); // Don't mind errors if managed config is missing.
       }
     }
