@@ -78,6 +78,9 @@ export interface GraphQLRequestContext<TContext = Record<string, any>> {
 
   logger: Logger;
 
+  readonly schema: GraphQLSchema;
+  readonly schemaHash: SchemaHash;
+
   readonly context: TContext;
   readonly cache: KeyValueCache;
 

@@ -16,6 +16,7 @@ import {
 import { ApolloServerPlugin } from 'apollo-server-plugin-base';
 import { InMemoryLRUCache } from 'apollo-server-caching';
 import { Dispatcher } from './dispatcher';
+import { generateSchemaHash } from "./schemaHash";
 
 // This test harness guarantees the presence of `query`.
 type IPluginTestHarnessGraphqlRequest = WithRequired<GraphQLRequest, 'query'>;
@@ -90,6 +91,8 @@ export default async function pluginTestHarness<TContext>({
   enablePluginsForSchemaResolvers(schema);
 
   const requestContext: GraphQLRequestContext<TContext> = {
+    schema,
+    schemaHash: generateSchemaHash(schema),
     logger: console,
     request: graphqlRequest,
     metrics: Object.create(null),
