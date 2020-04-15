@@ -33,7 +33,7 @@ const clientVersionHeaderKey = 'apollographql-client-version';
 // is done, it passes the Trace back to its associated EngineReportingAgent via
 // the addTrace callback. This class isn't for direct use; its constructor is a
 // private API for communicating with EngineReportingAgent.
-export const plugin = <TContext>(
+const plugin = <TContext>(
   options: EngineReportingOptions<TContext> = Object.create(null),
   addTrace: (args: AddTraceArgs) => Promise<void>,
   // schemaHash: string,
@@ -271,7 +271,7 @@ function defaultGenerateClientInfo({ request }: GraphQLRequestContext) {
 // to the to-be-deprecated options.privateVariables, except that the redacted variable
 // names will still be visible in the UI even if the values are hidden.
 // If sendVariableValues is null or undefined, we default to the {none: true} case.
-export function makeTraceDetails(
+function makeTraceDetails(
   variables: Record<string, any>,
   sendVariableValues?: VariableValueOptions,
   operationString?: string,
@@ -401,3 +401,10 @@ export function makeHTTPRequestHeaders(
     }
   }
 }
+
+export default plugin;
+
+export const __testing__ = {
+  makeTraceDetails,
+  makeHTTPRequestHeaders,
+};

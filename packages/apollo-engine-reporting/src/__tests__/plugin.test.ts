@@ -1,7 +1,8 @@
 import { makeExecutableSchema, addMockFunctionsToSchema } from 'graphql-tools';
 import { graphql, GraphQLError } from 'graphql';
 import { Request } from 'node-fetch';
-import { makeTraceDetails, makeHTTPRequestHeaders, plugin } from '../plugin';
+import plugin, { __testing__ } from '../plugin';
+const { makeTraceDetails, makeHTTPRequestHeaders } = __testing__;
 import { Headers } from 'apollo-server-env';
 import { AddTraceArgs } from '../agent';
 import { Trace } from 'apollo-engine-reporting-protobuf';
