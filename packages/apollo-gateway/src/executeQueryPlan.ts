@@ -78,7 +78,7 @@ export async function executeQueryPlan<TContext>(
     }
   }
   const [s, ns] = process.hrtime(startTime);
-  context.requestContext.logger.info(`[apollo-gateway](queryPlanExecution) ${s}s ${ns / 1000000}ms`);
+  context.requestContext.logger?.info(`[apollo-gateway](queryPlanExecution) ${s}s ${ns / 1000000}ms`);
 
   // FIXME: Re-executing the query is a pretty heavy handed way of making sure
   // only explicitly requested fields are included and field ordering follows
@@ -105,7 +105,7 @@ export async function executeQueryPlan<TContext>(
       fieldResolver: defaultFieldResolverWithAliasSupport,
     }));
     const [s, ns] = process.hrtime(startTime);
-    context.requestContext.logger.info(
+    context.requestContext.logger?.info(
       `[apollo-gateway](finalExecutionPass) ${s}s ${ns / 1000000}ms`,
     );
   } catch (error) {
@@ -248,7 +248,7 @@ async function executeFetch<TContext>(
     }
 
     const [s, ns] = process.hrtime(startTime);
-    context.requestContext.logger.info(
+    context.requestContext.logger?.info(
       `[apollo-gateway](executeFetch:rootFetch:${
         fetch.serviceName
       }) ${s}s ${ns / 1000000}ms`,
@@ -305,7 +305,7 @@ async function executeFetch<TContext>(
     }
 
     const [s, ns] = process.hrtime(startTime);
-    context.requestContext.logger.info(
+    context.requestContext.logger?.info(
       `[apollo-gateway](executeFetch:entitiesFetch:${
         fetch.serviceName
       }) ${s}s ${ns / 1000000}ms`,
