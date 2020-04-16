@@ -64,6 +64,7 @@ export async function executeQueryPlan<TContext>(
     requestContext.metrics && requestContext.metrics.captureTraces
   );
 
+  const startTime = process.hrtime();
   if (queryPlan.node) {
     const traceNode = await executeNode(
       context,
@@ -76,12 +77,15 @@ export async function executeQueryPlan<TContext>(
       requestContext.metrics!.queryPlanTrace = traceNode;
     }
   }
+  const [s, ns] = process.hrtime(startTime);
+  context.requestContext.logger.info(`[apollo-gateway](queryPlanExecution) ${s}s ${ns / 1000000}ms`);
 
   // FIXME: Re-executing the query is a pretty heavy handed way of making sure
   // only explicitly requested fields are included and field ordering follows
   // the original query.
   // It is also used to allow execution of introspection queries though.
   try {
+    const startTime = process.hrtime();
     ({ data } = await execute({
       schema: operationContext.schema,
       document: {
@@ -100,6 +104,10 @@ export async function executeQueryPlan<TContext>(
       // GraphQLExtensions this will be how alias support is maintained
       fieldResolver: defaultFieldResolverWithAliasSupport,
     }));
+    const [s, ns] = process.hrtime(startTime);
+    context.requestContext.logger.info(
+      `[apollo-gateway](finalExecutionPass) ${s}s ${ns / 1000000}ms`,
+    );
   } catch (error) {
     return { errors: [error] };
   }
@@ -227,6 +235,8 @@ async function executeFetch<TContext>(
   }
 
   if (!fetch.requires) {
+    const startTime = process.hrtime();
+
     const dataReceivedFromService = await sendOperation(
       context,
       operationForRootFetch(fetch, operationType),
@@ -236,7 +246,16 @@ async function executeFetch<TContext>(
     for (const entity of entities) {
       deepMerge(entity, dataReceivedFromService);
     }
+
+    const [s, ns] = process.hrtime(startTime);
+    context.requestContext.logger.info(
+      `[apollo-gateway](executeFetch:rootFetch:${
+        fetch.serviceName
+      }) ${s}s ${ns / 1000000}ms`,
+    );
   } else {
+    const startTime = process.hrtime();
+
     const requires = fetch.requires;
 
     const representations: ResultMap[] = [];
@@ -284,6 +303,13 @@ async function executeFetch<TContext>(
     for (let i = 0; i < entities.length; i++) {
       deepMerge(entities[representationToEntity[i]], receivedEntities[i]);
     }
+
+    const [s, ns] = process.hrtime(startTime);
+    context.requestContext.logger.info(
+      `[apollo-gateway](executeFetch:entitiesFetch:${
+        fetch.serviceName
+      }) ${s}s ${ns / 1000000}ms`,
+    );
   }
 
   async function sendOperation(

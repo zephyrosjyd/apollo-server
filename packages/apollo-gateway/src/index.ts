@@ -651,12 +651,21 @@ export class ApolloGateway implements GraphQLService {
       queryPlan = await this.queryPlanStore.get(queryPlanStoreKey);
     }
 
+    if (queryPlan) {
+      this.logger.info('[apollo-gateway](buildQueryPlan) query plan cache hit');
+    }
+
     if (!queryPlan) {
+      this.logger.info('[apollo-gateway](buildQueryPlan) query plan cache miss');
+      const startTime = process.hrtime();
       queryPlan = buildQueryPlan(operationContext, {
         autoFragmentization: Boolean(
           this.config.experimental_autoFragmentization,
         ),
       });
+      const [s, ns] = process.hrtime(startTime);
+      this.logger.info(`[apollo-gateway](buildQueryPlan) ${s}s ${ns / 1000000}ms`);
+
       if (this.queryPlanStore) {
         // The underlying cache store behind the `documentStore` returns a
         // `Promise` which is resolved (or rejected), eventually, based on the
