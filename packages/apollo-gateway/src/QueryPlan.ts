@@ -5,16 +5,22 @@ import {
   SelectionSetNode,
   VariableDefinitionNode,
 } from 'graphql';
-// import { astSerializer, queryPlanSerializer } from './snapshotSerializers';
-// import prettyFormat from 'pretty-format';
+import { astSerializer, queryPlanSerializer } from './snapshotSerializers';
+import prettyFormat from 'pretty-format';
 
 export type ResponsePath = (string | number)[];
 
 export type FragmentMap = { [fragmentName: string]: FragmentDefinitionNode };
 
+export type QueryPlanExplanation = [{
+  source: string,
+  explanation: string,
+}]
+
 export interface QueryPlan {
   kind: 'QueryPlan';
   node?: PlanNode;
+  explanation?: QueryPlanExplanation
 }
 
 export type OperationContext = {
@@ -50,8 +56,14 @@ export interface FlattenNode {
 }
 
 export function serializeQueryPlan(queryPlan: QueryPlan) {
-  return JSON.stringify(queryPlan);
-  // return prettyFormat(queryPlan, {
-  //   plugins: [queryPlanSerializer, astSerializer],
-  // });
+  // return JSON.stringify(queryPlan);
+  let prettyOutput = prettyFormat(queryPlan, {
+    plugins: [queryPlanSerializer, astSerializer],
+  });
+
+  if (queryPlan.explanation) {
+    prettyOutput += queryPlan.explanation.map(explanation => `${explanation.source} > ${explanation.explanation}`).join("\n");
+  }
+
+  return prettyOutput;
 }

@@ -45,6 +45,7 @@ import {
   ResponsePath,
   OperationContext,
   FragmentMap,
+  QueryPlanExplanation,
 } from './QueryPlan';
 import { getFieldDef, getResponseName } from './utilities/graphql';
 import { MultiMap } from './utilities/MultiMap';
@@ -100,15 +101,21 @@ export function buildQueryPlan(
     node: nodes.length
       ? flatWrap(isMutation ? 'Sequence' : 'Parallel', nodes)
       : undefined,
+    explanation: context.planningExplanation
   };
 }
 
+// For each service group, create a distinct query plan step
 function executionNodeForGroup(
   context: QueryPlanningContext,
   group: FetchGroup,
   parentType?: GraphQLCompositeType,
 ): PlanNode {
   const selectionSet = selectionSetFromFieldSet(group.fields, parentType);
+  context.planningExplanation.push({
+    source: "executionNodeForGroup::selectionSetFromFieldSet",
+    explanation: `Selection set for parent type ${parentType?.name} determined to be ${JSON.stringify(selectionSet.selections)}`
+  });
 
   const fetchNode: FetchNode = {
     kind: 'Fetch',
@@ -171,6 +178,7 @@ function splitRootFields(
     [serviceName: string]: FetchGroup;
   } = Object.create(null);
 
+  // Creates fetch groups as necessary per-service after an owning service has been identified
   function groupForService(serviceName: string) {
     let group = groupsByService[serviceName];
 
@@ -643,13 +651,22 @@ function collectFields(
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
       case Kind.FIELD:
+        context.planningExplanation.push({
+          source: "collectFields::FIELD",
+          explanation: `${selection.name.value} added to field selections`
+        });
         const fieldDef = context.getFieldDef(scope.parentType, selection);
         fields.push({ scope, fieldNode: selection, fieldDef });
         break;
       case Kind.INLINE_FRAGMENT:
+        const fragmentCondition = getFragmentCondition(selection);
+        context.planningExplanation.push({
+          source: "collectFields::INLINE_FRAGMENT",
+          explanation: `Expanding ${selection.typeCondition?.name.value} due to fragment condition ${fragmentCondition.name} of type/kind ${fragmentCondition.astNode?.name.value} ${fragmentCondition.astNode?.kind} scope ${JSON.stringify(scope)}`
+        });
         collectFields(
           context,
-          context.newScope(getFragmentCondition(selection), scope),
+          context.newScope(fragmentCondition, scope),
           selection.selectionSet,
           fields,
           visitedFragmentNames,
@@ -659,6 +676,10 @@ function collectFields(
         const fragmentName = selection.name.value;
 
         if (visitedFragmentNames[fragmentName]) {
+          context.planningExplanation.push({
+            source: "collectFields::FRAGMENT_SPREAD",
+            explanation: `Ignoring previously-seen fragment ${fragmentName}`
+          });
           continue;
         }
         visitedFragmentNames[fragmentName] = true;
@@ -667,10 +688,14 @@ function collectFields(
         if (!fragment) {
           continue;
         }
-
+        const fragmentSpreadCondition = getFragmentCondition(fragment);
+        context.planningExplanation.push({
+          source: "collectFields::INLINE_FRAGMENT",
+          explanation: `Expanding SPREAD ${fragment.typeCondition?.name} due to fragment condition ${fragmentSpreadCondition.name} of type/kind ${fragmentSpreadCondition.astNode?.name} ${fragmentSpreadCondition.astNode?.kind}`
+        });
         collectFields(
           context,
-          context.newScope(getFragmentCondition(fragment), scope),
+          context.newScope(fragmentSpreadCondition, scope),
           fragment.selectionSet,
           fields,
           visitedFragmentNames,
@@ -839,9 +864,9 @@ export class QueryPlanningContext {
     [name: string]: VariableDefinitionNode;
   };
 
-  public planningExplanation: {
-
-  }
+  public planningExplanation: QueryPlanExplanation = [
+    { source: "incoming operation", explanation: "the start of the operation"}
+  ];
 
   constructor(
     public readonly schema: GraphQLSchema,

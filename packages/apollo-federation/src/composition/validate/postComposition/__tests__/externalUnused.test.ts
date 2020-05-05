@@ -151,6 +151,53 @@ describe('externalUnused', () => {
     expect(warnings).toEqual([]);
   });
 
+  fit('does not warn when @external is selected by a @provides used from another extended type', () => {
+    const serviceA = {
+      typeDefs: gql`
+        type Thing @key(fields: "id") {
+        id: ID
+        subThing: SubThing
+      }
+
+      type SubThing @key(fields: "id") {
+        id: ID
+        name: String
+      }
+
+      extend type Query {
+        getThing: Thing
+      }
+      `,
+      name: 'serviceA',
+    };
+
+    const serviceB = {
+      typeDefs: gql`
+        extend type Query {
+          getExtendedThing: Thing @provides(fields: "subThing")
+        }
+
+        extend type SubThing @key(fields: "id") {
+          id: ID @external
+          name: String @external
+          anotherExtendingField: Boolean
+        }
+
+        extend type Thing @key(fields: "id") {
+          id: ID @external
+          subThing: SubThing @external @provides(fields: "name")
+          anotherField: Boolean
+        }
+      `,
+      name: 'serviceB',
+    };
+
+    const serviceList = [serviceA, serviceB];
+    const { schema } = composeServices(serviceList);
+    const warnings = validateExternalUnused({ schema, serviceList });
+    expect(warnings).toEqual([]);
+  });
+
   it.todo(
     'does not error when @provides selects an external field in a subselection',
   );

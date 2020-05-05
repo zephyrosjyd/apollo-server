@@ -58,12 +58,12 @@ describe('buildQueryPlan', () => {
     const query = gql`
       query {
         body {
-          ...on Image {
+          ... on Image {
             attributes {
               url
             }
           }
-          ...on Text {
+          ... on Text {
             attributes {
               bold
               text
@@ -1234,5 +1234,56 @@ describe('buildQueryPlan', () => {
         }
       `);
     });
+  });
+
+  // TODO: Also add one for named fragments
+  fit(`should properly expand nested unions with inline fragments`, () => {
+    const query = gql`
+      query {
+        body {
+          ... on Image {
+            ... on Body {
+              ... on Image {
+                attributes {
+                  url
+                }
+              }
+              ... on Text {
+                attributes {
+                  bold
+                  text
+                }
+              }
+            }
+          }
+          ... on Text {
+            attributes {
+              url
+            }
+          }
+        }
+      }
+    `;
+
+    const queryPlan = buildQueryPlan(
+      buildOperationContext(schema, query, undefined),
+    );
+
+    expect(queryPlan).toMatchInlineSnapshot(`
+      QueryPlan {
+        Fetch(service: "documents") {
+          {
+            body {
+              __typename
+              ... on Image {
+                attributes {
+                  url
+                }
+              }
+            }
+          }
+        },
+      }
+    `);
   });
 });

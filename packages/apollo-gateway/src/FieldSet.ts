@@ -99,6 +99,9 @@ function wrapInInlineFragmentIfNeeded(
   typeCondition: GraphQLCompositeType,
   parentType?: GraphQLCompositeType,
 ): SelectionNode[] {
+  console.log("====== wrapInInlineFragmentIfNeeded", parentType?.name, typeCondition.name);
+  console.dir(selections);
+  console.log("========= /")
   return typeCondition === parentType
     ? selections
     : [

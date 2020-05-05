@@ -74,6 +74,8 @@ export const externalUnused: PostCompositionValidator = ({ schema }) => {
                   parseSelections(directive.arguments[0].value.value);
                 // find the selections which are fields with names matching
                 // our external field name
+
+                // TODO: JH Do we support nested @provides selectionSets? Doesn't look likw it.
                 return (
                   selections &&
                   selections.some(
