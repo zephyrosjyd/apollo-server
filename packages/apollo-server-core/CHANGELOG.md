@@ -1,5 +1,6 @@
 # Changelog
 
+
 ### vNEXT
 
 * `apollo-server-core`: Add persisted queries [PR#1149](https://github.com/apollographql/apollo-server/pull/1149)
