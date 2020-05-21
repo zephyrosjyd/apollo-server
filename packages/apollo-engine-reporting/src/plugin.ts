@@ -130,8 +130,8 @@ export const plugin = <TContext>(
           | GraphQLRequestContextDidResolveOperation<TContext>
           | GraphQLRequestContextDidEncounterErrors<TContext>,
       ): Promise<void> {
-        if (typeof options.traceReporting === "boolean") {
-          shouldReportTrace = options.traceReporting
+        if (typeof options.traceReporting === 'boolean') {
+          shouldReportTrace = options.traceReporting;
           return;
         }
 
@@ -152,7 +152,6 @@ export const plugin = <TContext>(
           shouldReportTrace = true;
         }
       }
-
 
       /**
        * Due to a number of exceptions in the request pipeline — which are

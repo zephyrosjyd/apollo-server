@@ -20,10 +20,11 @@ import retry from 'async-retry';
 
 import { plugin } from './plugin';
 import {
-  GraphQLRequestContext, GraphQLRequestContextDidEncounterErrors,
+  GraphQLRequestContext,
+  GraphQLRequestContextDidEncounterErrors,
   GraphQLRequestContextDidResolveOperation,
-  Logger
-} from "apollo-server-types";
+  Logger,
+} from 'apollo-server-types';
 import { InMemoryLRUCache } from 'apollo-server-caching';
 import { defaultEngineReportingSignature } from 'apollo-graphql';
 import { ApolloServerPlugin } from 'apollo-server-plugin-base';
@@ -63,8 +64,8 @@ export type VariableValueOptions =
 export type TraceReportingOptions<TContext> =
   | ((
       request:
-      | GraphQLRequestContextDidResolveOperation<TContext>
-      | GraphQLRequestContextDidEncounterErrors<TContext>,
+        | GraphQLRequestContextDidResolveOperation<TContext>
+        | GraphQLRequestContextDidEncounterErrors<TContext>,
     ) => Promise<boolean>)
   | boolean;
 
@@ -73,10 +74,15 @@ export type GenerateClientInfo<TContext> = (
 ) => ClientInfo;
 
 // AS3: Drop support for deprecated `ENGINE_API_KEY`.
-export function getEngineApiKey(
-  {engine, skipWarn = false, logger= console }:
-    {engine: EngineReportingOptions<any> | boolean | undefined, skipWarn?: boolean, logger?: Logger }
-    ) {
+export function getEngineApiKey({
+  engine,
+  skipWarn = false,
+  logger = console,
+}: {
+  engine: EngineReportingOptions<any> | boolean | undefined;
+  skipWarn?: boolean;
+  logger?: Logger;
+}) {
   if (typeof engine === 'object') {
     if (engine.apiKey) {
       return engine.apiKey;
@@ -85,34 +91,52 @@ export function getEngineApiKey(
   const legacyApiKeyFromEnv = process.env.ENGINE_API_KEY;
   const apiKeyFromEnv = process.env.APOLLO_KEY;
 
-  if(legacyApiKeyFromEnv && apiKeyFromEnv && !skipWarn) {
-    logger.warn("Using `APOLLO_KEY` since `ENGINE_API_KEY` (deprecated) is also set in the environment.");
+  if (legacyApiKeyFromEnv && apiKeyFromEnv && !skipWarn) {
+    logger.warn(
+      'Using `APOLLO_KEY` since `ENGINE_API_KEY` (deprecated) is also set in the environment.',
+    );
   }
-  if(legacyApiKeyFromEnv && !warnedOnDeprecatedApiKey && !skipWarn) {
-    logger.warn("[deprecated] The `ENGINE_API_KEY` environment variable has been renamed to `APOLLO_KEY`.");
+  if (legacyApiKeyFromEnv && !warnedOnDeprecatedApiKey && !skipWarn) {
+    logger.warn(
+      '[deprecated] The `ENGINE_API_KEY` environment variable has been renamed to `APOLLO_KEY`.',
+    );
     warnedOnDeprecatedApiKey = true;
   }
-  return  apiKeyFromEnv || legacyApiKeyFromEnv || ''
+  return apiKeyFromEnv || legacyApiKeyFromEnv || '';
 }
 
 // AS3: Drop support for deprecated `ENGINE_SCHEMA_TAG`.
-export function getEngineGraphVariant(engine: EngineReportingOptions<any> | boolean | undefined, logger: Logger = console): string | undefined {
+export function getEngineGraphVariant(
+  engine: EngineReportingOptions<any> | boolean | undefined,
+  logger: Logger = console,
+): string | undefined {
   if (engine === false) {
     return;
-  } else if (typeof engine === 'object' && (engine.graphVariant || engine.schemaTag)) {
+  } else if (
+    typeof engine === 'object' &&
+    (engine.graphVariant || engine.schemaTag)
+  ) {
     if (engine.graphVariant && engine.schemaTag) {
-      throw new Error('Cannot set both engine.graphVariant and engine.schemaTag. Please use engine.graphVariant.');
+      throw new Error(
+        'Cannot set both engine.graphVariant and engine.schemaTag. Please use engine.graphVariant.',
+      );
     }
     if (engine.schemaTag) {
-      logger.warn('[deprecated] The `schemaTag` property within `engine` configuration has been renamed to `graphVariant`.');
+      logger.warn(
+        '[deprecated] The `schemaTag` property within `engine` configuration has been renamed to `graphVariant`.',
+      );
     }
     return engine.graphVariant || engine.schemaTag;
   } else {
     if (process.env.ENGINE_SCHEMA_TAG) {
-      logger.warn('[deprecated] The `ENGINE_SCHEMA_TAG` environment variable has been renamed to `APOLLO_GRAPH_VARIANT`.');
+      logger.warn(
+        '[deprecated] The `ENGINE_SCHEMA_TAG` environment variable has been renamed to `APOLLO_GRAPH_VARIANT`.',
+      );
     }
     if (process.env.ENGINE_SCHEMA_TAG && process.env.APOLLO_GRAPH_VARIANT) {
-      throw new Error('`APOLLO_GRAPH_VARIANT` and `ENGINE_SCHEMA_TAG` (deprecated) environment variables must not both be set.')
+      throw new Error(
+        '`APOLLO_GRAPH_VARIANT` and `ENGINE_SCHEMA_TAG` (deprecated) environment variables must not both be set.',
+      );
     }
     return process.env.APOLLO_GRAPH_VARIANT || process.env.ENGINE_SCHEMA_TAG;
   }
@@ -364,7 +388,7 @@ export interface AddTraceArgs {
   executableSchemaId: string;
   source?: string;
   document?: DocumentNode;
-  logger: Logger,
+  logger: Logger;
 }
 
 interface TraceCacheKey {
@@ -432,7 +456,11 @@ export class EngineReportingAgent<TContext = any> {
 
   public constructor(options: EngineReportingOptions<TContext> = {}) {
     this.options = options;
-    this.apiKey = getEngineApiKey({engine: this.options, skipWarn: false, logger: this.logger});
+    this.apiKey = getEngineApiKey({
+      engine: this.options,
+      skipWarn: false,
+      logger: this.logger,
+    });
     if (options.logger) this.logger = options.logger;
     this.bootId = uuidv4();
     this.graphVariant = getEngineGraphVariant(options, this.logger) || '';
@@ -458,7 +486,7 @@ export class EngineReportingAgent<TContext = any> {
 
     if (this.options.handleSignals !== false) {
       const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
-      signals.forEach((signal) => {
+      signals.forEach(signal => {
         // Note: Node only started sending signal names to signal events with
         // Node v10 so we can't use that feature here.
         const handler: NodeJS.SignalsListener = async () => {
@@ -563,6 +591,52 @@ export class EngineReportingAgent<TContext = any> {
       >();
     }
 
+    const traceCacheKey = {
+      statsReportKey,
+      statsBucket: DurationHistogram.durationToBucket(trace.durationNs),
+      endsAtMinute:
+        ((trace && trace.endTime && trace.endTime.seconds) || 0) % 60,
+    };
+
+    const convertTraceToStats =
+      reportData.traceCache.get(traceCacheKey) === true;
+
+    if (convertTraceToStats) {
+      const statsContext: IStatsContext = {
+        clientName: trace.clientName,
+        clientVersion: trace.clientVersion,
+        clientReferenceId: trace.clientReferenceId,
+      };
+
+      // TODO: Update sizing
+      let contextualizedStats: ContextualizedStats = (report.tracesPerQuery[
+        statsReportKey
+      ] as any).statsMap.get(statsContext);
+
+      if (!contextualizedStats) {
+        contextualizedStats = new ContextualizedStats(statsContext);
+        (report.tracesPerQuery[statsReportKey] as any).statsMap.set(
+          statsContext,
+          contextualizedStats,
+        );
+      }
+
+      contextualizedStats.addTrace(trace);
+    } else {
+      const protobufError = Trace.verify(trace);
+      if (protobufError) {
+        throw new Error(`Error encoding trace: ${protobufError}`);
+      }
+      const encodedTrace = Trace.encode(trace).finish();
+
+      // See comment on our override of Traces.encode inside of
+      // apollo-engine-reporting-protobuf to learn more about this strategy.
+      (report.tracesPerQuery[statsReportKey] as any).encodedTraces.push(
+        encodedTrace,
+      );
+      reportData.size +=
+        encodedTrace.length + Buffer.byteLength(statsReportKey);
+    }
 
     // If the buffer gets big (according to our estimate), send.
     if (
@@ -571,68 +645,12 @@ export class EngineReportingAgent<TContext = any> {
         (this.options.maxUncompressedReportSize || 4 * 1024 * 1024)
     ) {
       await this.sendReportAndReportErrors(executableSchemaId);
-
-      const traceCacheKey = {
-        statsReportKey,
-        statsBucket: DurationHistogram.durationToBucket(trace.durationNs),
-        endsAtMinute:
-          ((trace && trace.endTime && trace.endTime.seconds) || 0) % 60,
-      };
-
-      const convertTraceToStats =
-        reportData.traceCache.get(traceCacheKey) === true;
-
-      if (convertTraceToStats) {
-        const statsContext: IStatsContext = {
-          clientName: trace.clientName,
-          clientVersion: trace.clientVersion,
-          clientReferenceId: trace.clientReferenceId,
-        };
-
-        // TODO: Update sizing
-        let contextualizedStats: ContextualizedStats =
-          (report.tracesPerQuery[statsReportKey] as any).statsMap.get(
-            statsContext,
-          );
-
-        if (!contextualizedStats) {
-          contextualizedStats = new ContextualizedStats(statsContext);
-          (report.tracesPerQuery[statsReportKey] as any).statsMap.set(
-            statsContext,
-            contextualizedStats
-          );
-        }
-
-        contextualizedStats.addTrace(trace);
-      } else {
-        const protobufError = Trace.verify(trace);
-        if (protobufError) {
-          throw new Error(`Error encoding trace: ${protobufError}`);
-        }
-        const encodedTrace = Trace.encode(trace).finish();
-
-        // See comment on our override of Traces.encode inside of
-        // apollo-engine-reporting-protobuf to learn more about this strategy.
-        (report.tracesPerQuery[statsReportKey] as any).encodedTraces.push(
-          encodedTrace,
-        );
-        reportData.size += encodedTrace.length + Buffer.byteLength(statsReportKey);
-      }
-
-        // If the buffer gets big (according to our estimate), send.
-        if (
-          this.sendReportsImmediately ||
-          reportData.size >=
-          (this.options.maxUncompressedReportSize || 4 * 1024 * 1024)
-        ) {
-          await this.sendReportAndReportErrors(executableSchemaId);
-        }
     }
   }
 
   public async sendAllReports(): Promise<void> {
     await Promise.all(
-      Object.keys(this.reportDataByExecutableSchemaId).map((id) =>
+      Object.keys(this.reportDataByExecutableSchemaId).map(id =>
         this.sendReport(id),
       ),
     );
@@ -667,11 +685,12 @@ export class EngineReportingAgent<TContext = any> {
 
     const statsKeys = Object.keys(report.tracesPerQuery);
     for (const statsKey of statsKeys) {
-      const statsMap: Map<IStatsContext, ContextualizedStats> = (report.tracesPerQuery[statsKey] as any).statsMap;
+      const statsMap: Map<IStatsContext, ContextualizedStats> = (report
+        .tracesPerQuery[statsKey] as any).statsMap;
       if (statsMap) {
-        let statsWithContext = report.tracesPerQuery[statsKey].statsWithContext
+        let statsWithContext = report.tracesPerQuery[statsKey].statsWithContext;
         if (!statsWithContext) {
-          statsWithContext = new Array<ContextualizedStatsProto>()
+          statsWithContext = new Array<ContextualizedStatsProto>();
           report.tracesPerQuery[statsKey].statsWithContext = statsWithContext;
         }
         for (const statWithContext of statsMap.values()) {
@@ -722,9 +741,8 @@ export class EngineReportingAgent<TContext = any> {
 
         if (curResponse.status >= 500 && curResponse.status < 600) {
           throw new Error(
-            `HTTP status ${curResponse.status}, ${
-              (await curResponse.text()) || '(no body)'
-            }`,
+            `HTTP status ${curResponse.status}, ${(await curResponse.text()) ||
+              '(no body)'}`,
           );
         } else {
           return curResponse;
@@ -811,7 +829,7 @@ export class EngineReportingAgent<TContext = any> {
     this.currentSchemaReporter = schemaReporter;
     const logger = this.logger;
 
-    setTimeout(function () {
+    setTimeout(function() {
       reportingLoop(schemaReporter, logger, false, fallbackReportingDelayInMs);
     }, delay);
   }
@@ -894,29 +912,25 @@ export class EngineReportingAgent<TContext = any> {
     // either the request-specific logger on the request context (if available)
     // or to the `logger` that was passed into `EngineReportingOptions` which
     // is provided in the `EngineReportingAgent` constructor options.
-    this.signatureCache.set(cacheKey, generatedSignature)
-      .catch(err => {
-        logger.warn(
-          'Could not store signature cache. ' +
-          (err && err.message) || err
-        )
-      });
+    this.signatureCache.set(cacheKey, generatedSignature).catch(err => {
+      logger.warn(
+        'Could not store signature cache. ' + (err && err.message) || err,
+      );
+    });
 
     return generatedSignature;
   }
 
   private async sendAllReportsAndReportErrors(): Promise<void> {
     await Promise.all(
-      Object.keys(
-        this.reportDataByExecutableSchemaId,
-      ).map((executableSchemaId) =>
+      Object.keys(this.reportDataByExecutableSchemaId).map(executableSchemaId =>
         this.sendReportAndReportErrors(executableSchemaId),
       ),
     );
   }
 
   private sendReportAndReportErrors(executableSchemaId: string): Promise<void> {
-    return this.sendReport(executableSchemaId).catch((err) => {
+    return this.sendReport(executableSchemaId).catch(err => {
       // This catch block is primarily intended to catch network errors from
       // the retried request itself, which include network errors and non-2xx
       // HTTP errors.
